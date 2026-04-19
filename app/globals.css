@@ -1,0 +1,99 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --radius: 0.5rem;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    @apply bg-slate-50 text-slate-900 antialiased;
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+@layer utilities {
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      theme('colors.slate.200') 25%,
+      theme('colors.slate.100') 50%,
+      theme('colors.slate.200') 75%
+    );
+    background-size: 200% 100%;
+    @apply animate-shimmer rounded;
+  }
+
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: theme('colors.slate.300') transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: theme('colors.slate.300');
+    border-radius: 3px;
+  }
+
+  /* ── Rich text (Tiptap) ── */
+  .rich-text .ProseMirror { outline: none; }
+
+  /* Placeholder */
+  .rich-text .ProseMirror p.is-editor-empty:first-child::before,
+  .rich-text .ProseMirror .is-empty::before {
+    content: attr(data-placeholder);
+    color: theme('colors.slate.400');
+    float: left;
+    pointer-events: none;
+    height: 0;
+  }
+
+  /* Typography */
+  .rich-text p            { @apply mb-1 leading-relaxed; }
+  .rich-text strong       { @apply font-semibold; }
+  .rich-text em           { @apply italic; }
+  .rich-text s            { @apply line-through; }
+  .rich-text ul           { @apply list-disc list-inside mb-1; }
+  .rich-text ol           { @apply list-decimal list-inside mb-1; }
+  .rich-text li           { @apply mb-0.5; }
+  .rich-text h1           { @apply text-lg font-bold mb-1; }
+  .rich-text h2           { @apply text-base font-bold mb-1; }
+  .rich-text h3           { @apply text-sm font-semibold mb-1; }
+  .rich-text code         { @apply text-xs bg-slate-100 dark:bg-slate-600 rounded px-1 py-0.5 font-mono; }
+  .rich-text pre          { @apply bg-slate-100 dark:bg-slate-700 rounded-lg p-3 mb-2 overflow-x-auto; }
+  .rich-text pre code     { @apply bg-transparent p-0; }
+  .rich-text blockquote   { @apply border-l-4 border-slate-300 dark:border-slate-500 pl-3 italic text-slate-500 dark:text-slate-400 mb-1; }
+  .rich-text hr           { @apply border-slate-200 dark:border-slate-600 my-3; }
+  .rich-text [data-mention-id] { @apply text-indigo-600 font-medium bg-indigo-50 dark:bg-indigo-900/30 rounded px-0.5; }
+
+  /* Images (screenshots) */
+  .rich-text img {
+    @apply max-w-full rounded-lg border border-slate-200 dark:border-slate-600 my-2 cursor-pointer;
+    max-height: 400px;
+    object-fit: contain;
+  }
+
+  /* Selected image node highlight */
+  .rich-text .ProseMirror-selectednode img {
+    @apply ring-2 ring-indigo-500;
+  }
+}
