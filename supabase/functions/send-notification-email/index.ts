@@ -18,6 +18,7 @@ const corsHeaders = {
 interface NotificationRecord {
   id: string
   user_id: string
+  actor_id?: string | null
   type: 'task_assigned' | 'note_mention' | 'task_created'
   task_id: string
   message: string
@@ -37,6 +38,49 @@ function stripHtml(html: string): string {
   return html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
 }
 
+function jsonResponse(body: unknown, init?: ResponseInit) {
+  return new Response(JSON.stringify(body), {
+    ...init,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
+  })
+}
+
+async function sendWithResend(params: {
+  apiKey: string
+  from: string
+  to: string | string[]
+  subject: string
+  html: string
+  text: string
+}) {
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${params.apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from: params.from,
+      to: params.to,
+      subject: params.subject,
+      html: params.html,
+      text: params.text,
+    }),
+  })
+
+  const raw = await res.text()
+
+  if (!res.ok) {
+    throw new Error(`Resend API error: ${raw}`)
+  }
+
+  try {
+    return JSON.parse(raw)
+  } catch {
+    return { id: undefined }
+  }
+}
+
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -46,37 +90,44 @@ serve(async (req: Request) => {
     const payload: WebhookPayload = await req.json()
 
     if (payload.type !== 'INSERT') {
-      return new Response(JSON.stringify({ skipped: 'not INSERT' }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+      return jsonResponse({ skipped: 'not INSERT' })
     }
 
     const notification = payload.record
     const knownTypes = ['task_assigned', 'note_mention', 'task_created']
     if (!knownTypes.includes(notification.type)) {
-      return new Response(JSON.stringify({ skipped: `unknown type: ${notification.type}` }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+      return jsonResponse({ skipped: `unknown type: ${notification.type}` })
     }
 
     // Use service role to bypass RLS
+    const supabaseUrl =
+      Deno.env.get('SUPABASE_URL') ??
+      Deno.env.get('NEXT_PUBLIC_SUPABASE_URL') ??
+      ''
+    const supabaseServiceRoleKey =
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ??
+      Deno.env.get('SERVICE_ROLE_KEY') ??
+      ''
+    if (!supabaseUrl || !supabaseServiceRoleKey) {
+      return jsonResponse(
+        {
+          error:
+            'Missing SUPABASE_URL (or NEXT_PUBLIC_SUPABASE_URL) and/or SUPABASE_SERVICE_ROLE_KEY (or SERVICE_ROLE_KEY) in Edge Function secrets',
+        },
+        { status: 500 },
+      )
+    }
+
     const supabase = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+      supabaseUrl,
+      supabaseServiceRoleKey,
     )
 
-    // Fetch recipient's auth email
-    const { data: authUser, error: authError } = await supabase.auth.admin.getUserById(
-      notification.user_id,
-    )
-    if (authError || !authUser?.user?.email) {
-      console.error('Failed to fetch user email:', authError)
-      return new Response(JSON.stringify({ error: 'User email not found' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+    const getAuthEmailForUserId = async (userId: string) => {
+      const { data: authUser, error: authError } = await supabase.auth.admin.getUserById(userId)
+      if (authError || !authUser?.user?.email) return null
+      return authUser.user.email
     }
-    const recipientEmail = authUser.user.email
 
     // Fetch recipient profile
     const { data: profile } = await supabase
@@ -85,10 +136,15 @@ serve(async (req: Request) => {
       .eq('id', notification.user_id)
       .single()
 
+    const actorId = notification.actor_id ?? null
+    const { data: actorProfile } = actorId
+      ? await supabase.from('profiles').select('full_name').eq('id', actorId).single()
+      : { data: null }
+
     // Fetch task + project
     const { data: task } = await supabase
       .from('tasks')
-      .select('title, project:projects(name)')
+      .select('title, project:projects(name, pm_id)')
       .eq('id', notification.task_id)
       .single()
 
@@ -100,6 +156,9 @@ serve(async (req: Request) => {
     const taskTitle = task?.title ?? 'a task'
     // @ts-ignore
     const projectName = task?.project?.name ?? ''
+    // @ts-ignore
+    const projectPmId = task?.project?.pm_id ?? null
+    const actorName = actorProfile?.full_name ?? 'Someone'
 
     let subject = ''
     let htmlBody = ''
@@ -165,44 +224,56 @@ serve(async (req: Request) => {
     const resendApiKey = Deno.env.get('RESEND_API_KEY')
 
     if (!resendApiKey) {
-      console.warn('RESEND_API_KEY not set — would have sent:', { to: recipientEmail, subject })
-      return new Response(JSON.stringify({ skipped: 'no RESEND_API_KEY' }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+      return jsonResponse({ error: 'Missing RESEND_API_KEY in Edge Function secrets' }, { status: 500 })
     }
 
-    const res = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${resendApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        from: emailFrom,
-        to: recipientEmail,
-        subject,
-        html: htmlBody,
-      }),
+    const recipientEmail = await getAuthEmailForUserId(notification.user_id)
+    if (!recipientEmail) {
+      return jsonResponse({ error: 'Recipient email not found' }, { status: 400 })
+    }
+
+    const resendData = await sendWithResend({
+      apiKey: resendApiKey,
+      from: emailFrom,
+      to: recipientEmail,
+      subject,
+      html: htmlBody,
+      text: stripHtml(htmlBody),
     })
 
-    if (!res.ok) {
-      const errText = await res.text()
-      console.error('Resend error:', errText)
-      throw new Error(`Resend API error: ${errText}`)
+    const extra: Record<string, unknown> = {}
+
+    const isSelfAssigned =
+      notification.type === 'task_assigned' && !!actorId && actorId === notification.user_id
+
+    if (isSelfAssigned && projectPmId && projectPmId !== notification.user_id) {
+      const pmEmail = await getAuthEmailForUserId(projectPmId)
+      if (pmEmail) {
+        const pmSubject = `[Donee] ${actorName} self-assigned: ${taskTitle}`
+        const pmHtml =
+          emailHeader +
+          `<p style="color:#1e293b;font-size:16px;margin:0 0 16px;">Hi,</p>
+           <p style="color:#475569;font-size:15px;margin:0 0 4px;">${actorName} assigned a task to themselves.</p>` +
+          taskCard('Task') +
+          ctaButton('View Task', taskLink) +
+          emailFooter('You received this because you are the PM of this project on Donee.')
+
+        const pmResendData = await sendWithResend({
+          apiKey: resendApiKey,
+          from: emailFrom,
+          to: pmEmail,
+          subject: pmSubject,
+          html: pmHtml,
+          text: stripHtml(pmHtml),
+        })
+
+        extra.pmResendId = pmResendData?.id
+      }
     }
 
-    const resendData = await res.json()
-    console.log(`Email sent — type: ${notification.type}, to: ${recipientEmail}, id: ${resendData.id}`)
-
-    return new Response(
-      JSON.stringify({ success: true, recipient: recipientEmail, resendId: resendData.id }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-    )
+    return jsonResponse({ success: true, resendId: resendData?.id, ...extra })
   } catch (err) {
     console.error('Edge function error:', err)
-    return new Response(JSON.stringify({ error: String(err) }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    })
+    return jsonResponse({ error: String(err) }, { status: 500 })
   }
 })
