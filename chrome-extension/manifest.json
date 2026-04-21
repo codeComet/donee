@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "Donee",
+  "version": "1.0.0",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAs9zma1NTPrh0cGV6w2zWC5jkjbEmXwIZqKbkg6fRpztYbyano3N5yEr8Njhw6XutdG8AKFWyVF7sqmkG8VD7h1SOBrU7a9hDGbUR0jT8WqpgONbb2lP8bg92WsPXH7LtB1KwiYN77JxIfTnamAT0QS/B8HpvVmwbkNFZKg0XMcl5hCMYlDVb6+WxKFwmdjhLov2iHBmNeaFK5thCaZ48Rn+I2WMF4jTz2ivT0fbK+pMUWIj7Zvw6SlxtXKP6cCRlABGs6f1v85jkWAFfH9jodEmh5DZjxkn8nRl5lIQLggJhHPcy8Xi0q3yR2oHeEWSHqKzFdHMb8G2wEHI+N81QmQIDAQAB",
+  "description": "Manage tasks and projects from anywhere.",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Donee"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": ["identity", "storage"],
+  "host_permissions": ["https://*.supabase.co/*"]
+}

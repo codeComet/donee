@@ -1,0 +1,52 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  background: transparent;
+  width: 380px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+#root {
+  width: 380px;
+  max-height: 560px;
+  overflow: hidden;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
+}
+
+.popup-scroll {
+  overflow-y: auto;
+  max-height: 460px;
+  scrollbar-width: thin;
+  scrollbar-color: #e2e8f0 transparent;
+}
+
+.popup-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+
+.popup-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.popup-scroll::-webkit-scrollbar-thumb {
+  background-color: #e2e8f0;
+  border-radius: 2px;
+}
+
+@layer utilities {
+  .skeleton {
+    background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite linear;
+  }
+}

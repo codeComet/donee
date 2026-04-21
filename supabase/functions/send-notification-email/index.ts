@@ -45,6 +45,11 @@ function jsonResponse(body: unknown, init?: ResponseInit) {
   })
 }
 
+function isEnvTruthy(name: string) {
+  const raw = (Deno.env.get(name) ?? '').trim().toLowerCase()
+  return raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on'
+}
+
 async function sendWithResend(params: {
   apiKey: string
   from: string
@@ -84,6 +89,10 @@ async function sendWithResend(params: {
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
+  }
+
+  if (isEnvTruthy('EMAIL_NOTIFICATIONS_DISABLED')) {
+    return jsonResponse({ skipped: 'email_notifications_disabled' })
   }
 
   try {
