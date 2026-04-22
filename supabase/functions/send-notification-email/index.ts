@@ -50,6 +50,14 @@ function isEnvTruthy(name: string) {
   return raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on'
 }
 
+function runtimeMeta() {
+  return {
+    deploymentId: Deno.env.get('DENO_DEPLOYMENT_ID') ?? null,
+    executionId: Deno.env.get('SB_EXECUTION_ID') ?? null,
+    region: Deno.env.get('SB_REGION') ?? null,
+  }
+}
+
 async function sendWithResend(params: {
   apiKey: string
   from: string
@@ -91,12 +99,43 @@ serve(async (req: Request) => {
     return new Response('ok', { headers: corsHeaders })
   }
 
+  if (req.method === 'GET') {
+    const rawDisabled = Deno.env.get('EMAIL_NOTIFICATIONS_DISABLED') ?? null
+    return jsonResponse({
+      ok: true,
+      emailNotificationsDisabled: isEnvTruthy('EMAIL_NOTIFICATIONS_DISABLED'),
+      emailNotificationsDisabledRaw: rawDisabled,
+      hasResendApiKey: !!Deno.env.get('RESEND_API_KEY'),
+      emailFrom: Deno.env.get('EMAIL_FROM') ?? null,
+      appUrl: Deno.env.get('NEXT_PUBLIC_APP_URL') ?? null,
+      ...runtimeMeta(),
+    })
+  }
+
+  if (req.method !== 'POST') {
+    return jsonResponse(
+      { error: `Method not allowed: ${req.method}`, allowed: ['GET', 'POST', 'OPTIONS'], ...runtimeMeta() },
+      { status: 405 },
+    )
+  }
+
+  const rawDisabled = Deno.env.get('EMAIL_NOTIFICATIONS_DISABLED') ?? null
   if (isEnvTruthy('EMAIL_NOTIFICATIONS_DISABLED')) {
-    return jsonResponse({ skipped: 'email_notifications_disabled' })
+    return jsonResponse({
+      skipped: 'email_notifications_disabled',
+      emailNotificationsDisabled: true,
+      emailNotificationsDisabledRaw: rawDisabled,
+      ...runtimeMeta(),
+    })
   }
 
   try {
-    const payload: WebhookPayload = await req.json()
+    const rawBody = await req.text()
+    if (!rawBody.trim()) {
+      return jsonResponse({ error: 'Empty request body', ...runtimeMeta() }, { status: 400 })
+    }
+
+    const payload: WebhookPayload = JSON.parse(rawBody)
 
     if (payload.type !== 'INSERT') {
       return jsonResponse({ skipped: 'not INSERT' })
