@@ -72,8 +72,8 @@
   .rich-text strong       { @apply font-semibold; }
   .rich-text em           { @apply italic; }
   .rich-text s            { @apply line-through; }
-  .rich-text ul           { @apply list-disc list-inside mb-1; }
-  .rich-text ol           { @apply list-decimal list-inside mb-1; }
+  .rich-text ul           { @apply list-disc list-outside mb-1 pl-5; }
+  .rich-text ol           { @apply list-decimal list-outside mb-1 pl-5; }
   .rich-text li           { @apply mb-0.5; }
   .rich-text h1           { @apply text-lg font-bold mb-1; }
   .rich-text h2           { @apply text-base font-bold mb-1; }

@@ -91,11 +91,26 @@ export default function AddTaskModal({
         description: form.description || null,
         created_by: profile.id,
       }
-      const { data, error } = await supabase.from('tasks').insert(payload).select().single()
+      const { data, error } = await supabase
+        .from('tasks')
+        .insert(payload)
+        .select(
+          `*,
+           project:projects(id, name, color),
+           assignee:profiles!tasks_assigned_to_fkey(id, full_name, avatar_url),
+           creator:profiles!tasks_created_by_fkey(id, full_name)`
+        )
+        .single()
       if (error) throw error
       return data
     },
-    onSuccess: () => {
+    onSuccess: (newTask) => {
+      qc.setQueriesData({ queryKey: ['tasks'] }, (old) =>
+        Array.isArray(old) ? [newTask, ...old.filter((t) => t.id !== newTask.id)] : [newTask]
+      )
+      qc.setQueriesData({ queryKey: ['tasks', 'project', newTask.project_id] }, (old) =>
+        Array.isArray(old) ? [newTask, ...old.filter((t) => t.id !== newTask.id)] : [newTask]
+      )
       qc.invalidateQueries({ queryKey: ['tasks'] })
       handleClose()
     },

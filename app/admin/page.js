@@ -25,7 +25,11 @@ export default async function AdminPage() {
   // Fetch all projects with PM info
   const { data: projects } = await supabase
     .from('projects')
-    .select(`*, pm:profiles!projects_pm_id_fkey(id, full_name, avatar_url)`)
+    .select(
+      `*,
+       pm:profiles!projects_pm_id_fkey(id, full_name, avatar_url),
+       members:project_members(user:profiles(id, full_name, avatar_url, role))`
+    )
     .order('created_at', { ascending: false })
 
   return (

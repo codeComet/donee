@@ -57,6 +57,7 @@ export default function RichTextEditor({
 }) {
   const fileRef = useRef(null);
   const [uploading, setUploading] = useState(false);
+  const [isEmpty, setIsEmpty] = useState(true);
   const [mentionState, setMentionState] = useState(null);
   // mentionState = { items: User[], coords: { left, bottom }, selectedIndex: number } | null
   const [mounted, setMounted] = useState(false);
@@ -192,6 +193,7 @@ export default function RichTextEditor({
     content: content || "",
     editable,
     onUpdate({ editor }) {
+      setIsEmpty(editor.isEmpty);
       onChange?.(editor.getHTML());
       detectMention(editor);
     },
@@ -258,6 +260,7 @@ export default function RichTextEditor({
   // Keep editorRef current
   useEffect(() => {
     editorRef.current = editor;
+    setIsEmpty(editor?.isEmpty ?? true);
   }, [editor]);
 
   // Close mention on Escape
@@ -390,7 +393,7 @@ export default function RichTextEditor({
           <button
             type="button"
             onClick={handleSubmit}
-            disabled={editor.isEmpty || uploading}
+            disabled={isEmpty || uploading}
             className="flex items-center gap-1.5 text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0"
           >
             <Send className="h-3.5 w-3.5" />
