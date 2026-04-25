@@ -4,6 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:prod": "dotenv -e .env.prod.local -- next dev",
+    "dev:dev": "dotenv -e .env.dev.local -- next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
@@ -46,6 +48,7 @@
     "@testing-library/user-event": "^14.5.2",
     "@vitest/coverage-v8": "^2.1.9",
     "autoprefixer": "^10.4.21",
+    "dotenv-cli": "^11.0.0",
     "eslint": "^9.17.0",
     "eslint-config-next": "^15.3.0",
     "jsdom": "^25.0.1",
