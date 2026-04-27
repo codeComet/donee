@@ -16,7 +16,7 @@ const labelClass =
 const readonlyClass =
   'text-sm text-slate-600 dark:text-slate-300 px-3 py-2.5 bg-slate-50 dark:bg-slate-700/50 rounded-xl border border-slate-200 dark:border-slate-600'
 
-export default function ProfileModal({ isOpen, onClose, profile }) {
+export default function ProfileModal({ isOpen, onClose, profile, workspaceMember }) {
   const router = useRouter()
   const [fullName, setFullName] = useState(profile?.full_name ?? '')
 
@@ -73,7 +73,7 @@ export default function ProfileModal({ isOpen, onClose, profile }) {
             <div>
               <label className={labelClass}>Role</label>
               <p className={cn(readonlyClass, 'capitalize')}>
-                {profile?.role?.replace('_', ' ') ?? '—'}
+                {(workspaceMember?.role ?? profile?.role)?.replace('_', ' ') ?? '—'}
               </p>
             </div>
 

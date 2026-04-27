@@ -127,6 +127,7 @@ export default function Topbar({ user, profile, workspace, workspaceMember }) {
         isOpen={profileOpen}
         onClose={() => setProfileOpen(false)}
         profile={profile}
+        workspaceMember={workspaceMember}
       />
     </header>
   )
