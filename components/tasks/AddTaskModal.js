@@ -47,7 +47,9 @@ export default function AddTaskModal({
   workspaceId,
   defaultProjectId,
 }) {
-  const isDeveloper = (workspaceMember?.role ?? profile?.role) === 'developer'
+  // Use workspace role exclusively — profiles.role can be stale when role was
+  // updated via workspace_members without updating profiles
+  const isDeveloper = workspaceMember?.role === 'developer'
   const [step, setStep] = useState(1)
   const [form, setForm] = useState({
     ...INITIAL_FORM,

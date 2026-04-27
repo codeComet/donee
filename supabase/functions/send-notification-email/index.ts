@@ -189,24 +189,33 @@ serve(async (req: Request) => {
       ? await supabase.from('profiles').select('full_name').eq('id', actorId).single()
       : { data: null }
 
-    // Fetch task + project
-    const { data: task } = await supabase
-      .from('tasks')
-      .select('title, project:projects(name, pm_id)')
-      .eq('id', notification.task_id)
-      .single()
+    // Fetch task — use maybeSingle() (no error on missing row) and avoid
+    // embedded join which can fail silently if schema cache is stale
+    const { data: task } = notification.task_id
+      ? await supabase
+          .from('tasks')
+          .select('id, title, project_id')
+          .eq('id', notification.task_id)
+          .maybeSingle()
+      : { data: null }
+
+    const { data: project } = task?.project_id
+      ? await supabase
+          .from('projects')
+          .select('name, pm_id')
+          .eq('id', task.project_id)
+          .maybeSingle()
+      : { data: null }
 
     const appUrl = Deno.env.get('NEXT_PUBLIC_APP_URL') ?? 'http://localhost:3000'
     const taskLink = `${appUrl}/dashboard/tasks?task=${notification.task_id}`
-    // Default to Resend's shared domain (works on free plan, sends to any address)
     const emailFrom = Deno.env.get('EMAIL_FROM') ?? 'onboarding@resend.dev'
     const recipientName = profile?.full_name ?? 'there'
     const taskTitle = task?.title ?? 'a task'
-    // @ts-ignore
-    const projectName = task?.project?.name ?? ''
-    // @ts-ignore
-    const projectPmId = task?.project?.pm_id ?? null
+    const projectName = project?.name ?? ''
+    const projectPmId = project?.pm_id ?? null
     const actorName = actorProfile?.full_name ?? 'Someone'
+
 
     let subject = ''
     let htmlBody = ''

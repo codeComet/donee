@@ -151,7 +151,7 @@ function ProjectFormModal({
               >
                 <option value="">— Select PM —</option>
                 {users
-                  .filter((u) => u.role === "pm" || u.role === "super_admin")
+                  .filter((u) => u.workspace_role === "pm" || u.workspace_role === "super_admin")
                   .map((u) => (
                     <option key={u.id} value={u.id}>
                       {u.full_name}

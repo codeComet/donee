@@ -154,6 +154,7 @@ export default function ProjectPageClient({ project, initialTasks, users, profil
         projects={[project]}
         users={users}
         profile={profile}
+        workspaceMember={workspaceMember}
         workspaceId={project.workspace_id}
         defaultProjectId={project.id}
       />
