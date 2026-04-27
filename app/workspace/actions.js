@@ -21,8 +21,21 @@ export async function createWorkspace(formData) {
   } = await supabase.auth.getUser()
   if (!user) return { error: 'Not authenticated' }
 
-  // Create workspace
-  const { data: workspace, error: wsError } = await supabase
+  // Use service role to bypass RLS for workspace creation.
+  // auth.uid() in RLS context can be NULL when JWT forwarding is unreliable
+  // in server actions — service role is safe here since we verify auth above
+  // and explicitly set created_by + user_id.
+  let db = supabase
+  if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    const { createClient } = await import('@supabase/supabase-js')
+    db = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_ROLE_KEY,
+      { auth: { persistSession: false, autoRefreshToken: false } }
+    )
+  }
+
+  const { data: workspace, error: wsError } = await db
     .from('workspaces')
     .insert({ name, created_by: user.id })
     .select('id')
@@ -30,8 +43,7 @@ export async function createWorkspace(formData) {
 
   if (wsError) return { error: wsError.message }
 
-  // Add creator as super_admin member
-  const { error: memberError } = await supabase
+  const { error: memberError } = await db
     .from('workspace_members')
     .insert({ workspace_id: workspace.id, user_id: user.id, role: 'super_admin' })
 
