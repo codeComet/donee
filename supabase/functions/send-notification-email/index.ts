@@ -45,6 +45,20 @@ function jsonResponse(body: unknown, init?: ResponseInit) {
   })
 }
 
+// Extract task title from notification.message as fallback when DB query fails.
+// Trigger-generated messages always embed the title:
+//   task_created / note_mention → {creator} ... "{title}" ...
+//   task_assigned               → ... task: {title} in project ...
+function titleFromMessage(message: string | undefined | null, type: string): string | null {
+  if (!message) return null
+  const quoted = /"([^"]+)"/.exec(message)?.[1]
+  if (quoted) return quoted
+  if (type === 'task_assigned') {
+    return /task:\s*(.+?)\s+in project/.exec(message)?.[1] ?? null
+  }
+  return null
+}
+
 function isEnvTruthy(name: string) {
   const raw = (Deno.env.get(name) ?? '').trim().toLowerCase()
   return raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on'
@@ -211,7 +225,7 @@ serve(async (req: Request) => {
     const taskLink = `${appUrl}/dashboard/tasks?task=${notification.task_id}`
     const emailFrom = Deno.env.get('EMAIL_FROM') ?? 'onboarding@resend.dev'
     const recipientName = profile?.full_name ?? 'there'
-    const taskTitle = task?.title ?? 'a task'
+    const taskTitle = task?.title ?? titleFromMessage(notification.message, notification.type) ?? 'a task'
     const projectName = project?.name ?? ''
     const projectPmId = project?.pm_id ?? null
     const actorName = actorProfile?.full_name ?? 'Someone'
