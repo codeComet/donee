@@ -31,7 +31,7 @@ const PROJECT_COLORS = [
 
 const INITIAL_FORM = { name: "", description: "", color: "#6366f1", pm_id: "" };
 
-async function fetchProjects() {
+async function fetchProjects(workspaceId) {
   const supabase = createClient();
   const { data, error } = await supabase
     .from("projects")
@@ -40,6 +40,7 @@ async function fetchProjects() {
        pm:profiles!projects_pm_id_fkey(id, full_name, avatar_url),
        members:project_members(user:profiles(id, full_name, avatar_url, role))`,
     )
+    .eq("workspace_id", workspaceId)
     .order("created_at", { ascending: false });
   if (error) throw error;
   return data ?? [];
@@ -308,15 +309,15 @@ function ProjectMembersModal({
   );
 }
 
-export default function ProjectsTab({ initialProjects, users }) {
+export default function ProjectsTab({ initialProjects, users, workspaceId }) {
   const qc = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState(null);
   const [membersTarget, setMembersTarget] = useState(null);
 
   const { data: projects } = useQuery({
-    queryKey: ["admin-projects"],
-    queryFn: fetchProjects,
+    queryKey: ["admin-projects", workspaceId],
+    queryFn: () => fetchProjects(workspaceId),
     initialData: initialProjects,
   });
 
@@ -332,6 +333,7 @@ export default function ProjectsTab({ initialProjects, users }) {
     mutationFn: (form) =>
       supabaseMutate(async (supabase, user) => {
         const { error } = await supabase.from("projects").insert({
+          workspace_id: workspaceId,
           name: form.name,
           description: form.description || null,
           color: form.color,
@@ -341,7 +343,7 @@ export default function ProjectsTab({ initialProjects, users }) {
         if (error) throw error;
       }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["admin-projects"] });
+      qc.invalidateQueries({ queryKey: ["admin-projects", workspaceId] });
       setCreateOpen(false);
     },
   });
@@ -361,7 +363,7 @@ export default function ProjectsTab({ initialProjects, users }) {
         if (error) throw error;
       }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["admin-projects"] });
+      qc.invalidateQueries({ queryKey: ["admin-projects", workspaceId] });
       setEditTarget(null);
     },
   });
@@ -375,7 +377,7 @@ export default function ProjectsTab({ initialProjects, users }) {
           .eq("id", id);
         if (error) throw error;
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-projects"] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-projects", workspaceId] }),
   });
 
   const addProjectMember = useMutation({
@@ -390,7 +392,7 @@ export default function ProjectsTab({ initialProjects, users }) {
         if (error) throw error;
       }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["admin-projects"] });
+      qc.invalidateQueries({ queryKey: ["admin-projects", workspaceId] });
       setMembersTarget(null);
     },
   });

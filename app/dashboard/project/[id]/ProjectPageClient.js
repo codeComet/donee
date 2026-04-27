@@ -26,7 +26,7 @@ async function fetchProjectTasks(projectId) {
   return data ?? []
 }
 
-export default function ProjectPageClient({ project, initialTasks, users, profile }) {
+export default function ProjectPageClient({ project, initialTasks, users, profile, workspaceMember }) {
   const [filters, setFilters] = useState({
     search: '',
     projectIds: [],
@@ -131,6 +131,7 @@ export default function ProjectPageClient({ project, initialTasks, users, profil
       <TaskTable
         tasks={filtered}
         profile={profile}
+        workspaceMember={workspaceMember}
         onRowClick={(task) => setSelectedTaskId(task.id)}
         selectedTaskId={selectedTaskId}
       />
@@ -139,6 +140,7 @@ export default function ProjectPageClient({ project, initialTasks, users, profil
         <TaskDrawer
           task={selectedTask}
           profile={profile}
+          workspaceMember={workspaceMember}
           projects={[project]}
           users={users}
           isOpen={!!selectedTaskId}
@@ -152,6 +154,7 @@ export default function ProjectPageClient({ project, initialTasks, users, profil
         projects={[project]}
         users={users}
         profile={profile}
+        workspaceId={project.workspace_id}
         defaultProjectId={project.id}
       />
     </div>

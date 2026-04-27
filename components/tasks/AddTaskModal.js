@@ -43,9 +43,11 @@ export default function AddTaskModal({
   projects,
   users,
   profile,
+  workspaceMember,
+  workspaceId,
   defaultProjectId,
 }) {
-  const isDeveloper = profile?.role === 'developer'
+  const isDeveloper = (workspaceMember?.role ?? profile?.role) === 'developer'
   const [step, setStep] = useState(1)
   const [form, setForm] = useState({
     ...INITIAL_FORM,

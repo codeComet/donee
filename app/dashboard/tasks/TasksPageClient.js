@@ -9,9 +9,9 @@ import AddTaskModal from '@/components/tasks/AddTaskModal'
 import TaskDrawer from '@/components/tasks/TaskDrawer'
 import { Plus } from 'lucide-react'
 
-async function fetchTasks() {
+async function fetchTasks(workspaceId) {
   const supabase = createClient()
-  const { data, error } = await supabase
+  let query = supabase
     .from('tasks')
     .select(
       `*,
@@ -20,11 +20,13 @@ async function fetchTasks() {
        creator:profiles!tasks_created_by_fkey(id, full_name)`
     )
     .order('updated_at', { ascending: false })
+  if (workspaceId) query = query.eq('workspace_id', workspaceId)
+  const { data, error } = await query
   if (error) throw error
   return data ?? []
 }
 
-export default function TasksPageClient({ initialTasks, projects, users, profile, openTaskId }) {
+export default function TasksPageClient({ initialTasks, projects, users, profile, workspaceMember, openTaskId, workspaceId }) {
   const [filters, setFilters] = useState({
     search: '',
     projectIds: [],
@@ -38,8 +40,8 @@ export default function TasksPageClient({ initialTasks, projects, users, profile
   const [addModalOpen, setAddModalOpen] = useState(false)
 
   const { data: tasks } = useQuery({
-    queryKey: ['tasks'],
-    queryFn: fetchTasks,
+    queryKey: ['tasks', workspaceId],
+    queryFn: () => fetchTasks(workspaceId),
     initialData: initialTasks,
     staleTime: 30_000,
   })
@@ -84,6 +86,7 @@ export default function TasksPageClient({ initialTasks, projects, users, profile
       <TaskTable
         tasks={filtered}
         profile={profile}
+        workspaceMember={workspaceMember}
         onRowClick={(task) => setSelectedTaskId(task.id)}
         selectedTaskId={selectedTaskId}
       />
@@ -92,6 +95,7 @@ export default function TasksPageClient({ initialTasks, projects, users, profile
         <TaskDrawer
           task={selectedTask}
           profile={profile}
+          workspaceMember={workspaceMember}
           projects={projects}
           users={users}
           isOpen={!!selectedTaskId}
@@ -105,6 +109,7 @@ export default function TasksPageClient({ initialTasks, projects, users, profile
         projects={projects}
         users={users}
         profile={profile}
+        workspaceId={workspaceId}
       />
     </div>
   )

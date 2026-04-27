@@ -182,7 +182,7 @@ function SelectField({
 }
 
 // ── Main drawer ───────────────────────────────────────────────────────────────
-export default function TaskDrawer({ task, isOpen, onClose, profile, users }) {
+export default function TaskDrawer({ task, isOpen, onClose, profile, workspaceMember, users }) {
   const qc = useQueryClient();
   const overlayRef = useRef(null);
   const [descEditing, setDescEditing] = useState(false);
@@ -274,8 +274,8 @@ export default function TaskDrawer({ task, isOpen, onClose, profile, users }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  const canEdit = canEditTask(profile, task);
-  const canAssign = canAssignTask(profile);
+  const canEdit = canEditTask(profile, task, workspaceMember);
+  const canAssign = canAssignTask(profile, workspaceMember);
   const projectMembers = users ?? [];
 
   if (!task) return null;

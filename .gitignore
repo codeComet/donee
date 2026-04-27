@@ -33,3 +33,4 @@ supabase/.branches/
 
 .vscode/
 .idea/
+.vercel

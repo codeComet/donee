@@ -142,7 +142,7 @@ serve(async (req: Request) => {
     }
 
     const notification = payload.record
-    const knownTypes = ['task_assigned', 'note_mention', 'task_created']
+    const knownTypes = ['task_assigned', 'note_mention', 'task_created', 'workspace_invite'] as const
     if (!knownTypes.includes(notification.type)) {
       return jsonResponse({ skipped: `unknown type: ${notification.type}` })
     }
@@ -266,6 +266,19 @@ serve(async (req: Request) => {
         taskCard('New Task') +
         ctaButton('Review Task', taskLink) +
         emailFooter('You received this because you manage this project on Donee.')
+    }
+
+    else if (notification.type === 'workspace_invite') {
+      const workspaceLink = `${appUrl}/workspace`
+      subject = `[Donee] You've been added to a workspace`
+      htmlBody = emailHeader +
+        `<p style="color:#1e293b;font-size:16px;margin:0 0 16px;">Hi ${recipientName},</p>
+         <p style="color:#475569;font-size:15px;margin:0 0 4px;">${stripHtml(notification.message ?? 'You have been added to a workspace on Donee.')}</p>` +
+        `<div style="background:#f1f5f9;border-radius:8px;padding:16px 20px;margin:16px 0 24px;">
+           <p style="margin:0;font-size:14px;color:#1e293b;">Sign in to Donee to access your new workspace.</p>
+         </div>` +
+        ctaButton('Open Donee', workspaceLink) +
+        emailFooter('You received this because you were added to a workspace on Donee.')
     }
 
     // ── Send via Resend ──────────────────────────────────────────────────────
