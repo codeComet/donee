@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { createServerSideClient } from '@/lib/supabase'
+import { getWorkspaceId } from '@/lib/workspace'
 import StatCards from '@/components/dashboard/StatCards'
 import TaskChart from '@/components/dashboard/TaskChart'
 import ProjectGrid from '@/components/dashboard/ProjectGrid'
@@ -16,6 +17,9 @@ export default async function DashboardPage() {
   } = await supabase.auth.getUser()
   if (!user) redirect('/')
 
+  const workspaceId = getWorkspaceId(cookieStore)
+  if (!workspaceId) redirect('/workspace')
+
   // ── Stats ───────────────────────────────────────────────
   const [
     { count: totalProjects },
@@ -23,10 +27,14 @@ export default async function DashboardPage() {
     { count: myTasks },
     { count: completedTasks },
   ] = await Promise.all([
-    supabase.from('projects').select('*', { count: 'exact', head: true }).eq('is_archived', false),
-    supabase.from('tasks').select('*', { count: 'exact', head: true }),
-    supabase.from('tasks').select('*', { count: 'exact', head: true }).eq('assigned_to', user.id),
-    supabase.from('tasks').select('*', { count: 'exact', head: true }).eq('status', 'done'),
+    supabase.from('projects').select('*', { count: 'exact', head: true })
+      .eq('workspace_id', workspaceId).eq('is_archived', false),
+    supabase.from('tasks').select('*', { count: 'exact', head: true })
+      .eq('workspace_id', workspaceId),
+    supabase.from('tasks').select('*', { count: 'exact', head: true })
+      .eq('workspace_id', workspaceId).eq('assigned_to', user.id),
+    supabase.from('tasks').select('*', { count: 'exact', head: true })
+      .eq('workspace_id', workspaceId).eq('status', 'done'),
   ])
 
   // ── Chart data: tasks created/completed per day (last 14 days) ───────────
@@ -35,15 +43,16 @@ export default async function DashboardPage() {
   const { data: createdTasks } = await supabase
     .from('tasks')
     .select('created_at')
+    .eq('workspace_id', workspaceId)
     .gte('created_at', since)
 
   const { data: doneTasks } = await supabase
     .from('tasks')
     .select('updated_at')
+    .eq('workspace_id', workspaceId)
     .eq('status', 'done')
     .gte('updated_at', since)
 
-  // Build day-keyed map
   function buildDayMap(items, dateKey) {
     const map = {}
     for (let i = 13; i >= 0; i--) {
@@ -72,6 +81,7 @@ export default async function DashboardPage() {
        pm:profiles!projects_pm_id_fkey(id, full_name, avatar_url),
        tasks(status)`
     )
+    .eq('workspace_id', workspaceId)
     .eq('is_archived', false)
     .order('created_at', { ascending: false })
     .limit(12)

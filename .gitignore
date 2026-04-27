@@ -20,7 +20,6 @@ pnpm-debug.log*
 
 instruction.md
 
-
 .env
 .env.*
 !.env.example
@@ -34,3 +33,4 @@ supabase/.branches/
 
 .vscode/
 .idea/
+.vercel

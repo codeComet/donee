@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { canAccessAdmin } from '@/lib/permissions'
 import Avatar from '@/components/ui/Avatar'
+import WorkspaceSwitcher from '@/components/workspace/WorkspaceSwitcher'
 import {
   LayoutDashboard,
   ListTodo,
@@ -16,7 +17,7 @@ import {
   Circle,
 } from 'lucide-react'
 
-export default function Sidebar({ profile, projects }) {
+export default function Sidebar({ profile, projects, workspaces = [], currentWorkspaceId, workspaceMember }) {
   const pathname = usePathname()
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -47,8 +48,17 @@ export default function Sidebar({ profile, projects }) {
         {!collapsed && <span className="text-white font-bold text-lg tracking-tight">Donee</span>}
       </div>
 
+      {/* Workspace switcher */}
+      <div className="pt-3 px-0">
+        <WorkspaceSwitcher
+          workspaces={workspaces}
+          currentWorkspaceId={currentWorkspaceId}
+          collapsed={collapsed}
+        />
+      </div>
+
       {/* Nav */}
-      <nav className="flex-1 py-4 space-y-1 px-2 overflow-y-auto scrollbar-thin">
+      <nav className="flex-1 py-2 space-y-1 px-2 overflow-y-auto scrollbar-thin">
         {/* Main links */}
         {navLinks.map(({ href, label, icon: Icon, exact }) => (
           <Link
@@ -95,7 +105,7 @@ export default function Sidebar({ profile, projects }) {
         )}
 
         {/* Admin link */}
-        {canAccessAdmin(profile) && (
+        {canAccessAdmin(profile, workspaceMember) && (
           <Link
             href="/admin"
             title={collapsed ? 'Admin' : undefined}
@@ -118,7 +128,9 @@ export default function Sidebar({ profile, projects }) {
         {!collapsed && (
           <div className="min-w-0 flex-1">
             <p className="text-sm font-medium text-slate-200 truncate">{profile?.full_name ?? 'User'}</p>
-            <p className="text-xs text-slate-500 capitalize">{profile?.role?.replace('_', ' ') ?? 'developer'}</p>
+            <p className="text-xs text-slate-500 capitalize">
+              {workspaceMember?.role?.replace('_', ' ') ?? profile?.role?.replace('_', ' ') ?? 'developer'}
+            </p>
           </div>
         )}
       </div>

@@ -29,7 +29,7 @@ function getBreadcrumbs(pathname) {
   return crumbs.slice(1) // skip Home since we show it as root
 }
 
-export default function Topbar({ user, profile }) {
+export default function Topbar({ user, profile, workspace, workspaceMember }) {
   const pathname = usePathname()
   const router = useRouter()
   const { theme, toggleTheme } = useTheme()
@@ -96,7 +96,9 @@ export default function Topbar({ user, profile }) {
             >
               <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-700">
                 <p className="text-sm font-semibold text-slate-800 dark:text-slate-100 truncate">{profile?.full_name}</p>
-                <p className="text-xs text-slate-500 dark:text-slate-400 capitalize">{profile?.role?.replace('_', ' ')}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 capitalize">
+                  {(workspaceMember?.role ?? profile?.role)?.replace('_', ' ')}
+                </p>
               </div>
 
               <DropdownMenu.Item
@@ -125,6 +127,7 @@ export default function Topbar({ user, profile }) {
         isOpen={profileOpen}
         onClose={() => setProfileOpen(false)}
         profile={profile}
+        workspaceMember={workspaceMember}
       />
     </header>
   )

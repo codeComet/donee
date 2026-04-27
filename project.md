@@ -18,23 +18,24 @@ Donee is a full-stack collaborative task tracker for small dev teams. Teams mana
 
 ## User Roles
 
-| Role | Abilities |
-|---|---|
-| `developer` | Add tasks, edit own tasks (assigned or created) |
-| `pm` | Everything developer + assign tasks + manage own projects |
+| Role          | Abilities                                                          |
+| ------------- | ------------------------------------------------------------------ |
+| `developer`   | Add tasks, edit own tasks (assigned or created)                    |
+| `pm`          | Everything developer + assign tasks + manage own projects          |
 | `super_admin` | Full access: all tasks, all projects, user management, admin panel |
 
 Role is stored in `profiles.role`. Google OAuth auto-creates profile via DB trigger.
 
 ## Pages
 
-| Route | Description |
-|---|---|
-| `/` | Login (Google OAuth only) |
-| `/dashboard` | Overview: stat cards, 14-day chart, project grid |
-| `/dashboard/tasks` | All tasks: sortable table with filters, task drawer |
-| `/dashboard/project/[id]` | Project tasks with project header |
-| `/admin` | Super admin: user roles, project CRUD |
+| Route                     | Description                                         |
+| ------------------------- | --------------------------------------------------- |
+| `/`                       | Login (Google OAuth only)                           |
+| `/workspace`              | Workspace onboarding (create/join/switch)           |
+| `/dashboard`              | Overview: stat cards, 14-day chart, project grid    |
+| `/dashboard/tasks`        | All tasks: sortable table with filters, task drawer |
+| `/dashboard/project/[id]` | Project tasks with project header                   |
+| `/admin`                  | Super admin: user roles, project CRUD               |
 
 ## Data Model
 
@@ -42,25 +43,35 @@ Role is stored in `profiles.role`. Google OAuth auto-creates profile via DB trig
 profiles         ← auth.users (auto-created by trigger)
   id, full_name, avatar_url, email, role
 
+workspaces
+  id, name, created_by, created_at
+
+workspace_members
+  id, workspace_id, user_id, role, joined_at
+
+workspace_invitations
+  id, workspace_id, email, invite_code, invited_by, created_at,
+  expires_at, accepted_at, accepted_by
+
 projects
-  id, name, description, color, pm_id, created_by, is_archived
+  id, workspace_id, name, description, color, pm_id, created_by, is_archived
 
 project_members
-  project_id, user_id   ← who's in what project
+  id, workspace_id, project_id, user_id, joined_at   ← who's in what project
 
 tasks
-  id, project_id, title, description
+  id, workspace_id, project_id, title, description
   priority: lowest|low|medium|high|critical
   status:   backlog|in_progress|estimation|review|
             done_in_staging|waiting_for_confirmation|paused|done
   assigned_to, created_by, estimation (text), url, updated_at
 
 task_notes
-  id, task_id, author_id, content, mentions (uuid[])
+  id, workspace_id, task_id, author_id, content, mentions (uuid[])
   ← @mention in content triggers notification (via DB trigger)
 
 notifications
-  id, user_id, task_id, type (task_assigned|note_mention), message, is_read
+  id, workspace_id, user_id, task_id, type (task_assigned|note_mention|task_created|workspace_invite), message, is_read
   ← realtime enabled, drives bell icon badge
 ```
 
@@ -88,6 +99,12 @@ NotificationDropdown (Topbar)
   → React Query['notifications', userId], 60s refetch + Realtime subscription
   → click → markRead + navigate to /dashboard/tasks?task={taskId}
 ```
+
+## Workspace Scoping
+
+- Current workspace is stored in an HTTP-only cookie (`donee_workspace_id`).
+- Middleware redirects authenticated users to `/workspace` if no cookie is set.
+- Dashboard/admin/tasks/project pages filter by `workspace_id` (or derive it via joins) so data is isolated per workspace.
 
 ## Supabase FK Aliases Used in Queries
 

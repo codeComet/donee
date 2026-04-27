@@ -67,7 +67,7 @@ function RelativeDate({ date }) {
   )
 }
 
-function InlineStatusSelect({ task, profile }) {
+function InlineStatusSelect({ task, profile, workspaceMember }) {
   const qc = useQueryClient()
 
   const mutation = useMutation({
@@ -93,7 +93,7 @@ function InlineStatusSelect({ task, profile }) {
     onSettled: () => qc.invalidateQueries({ queryKey: ['tasks'] }),
   })
 
-  const canEdit = canEditTask(profile, task)
+  const canEdit = canEditTask(profile, task, workspaceMember)
 
   if (!canEdit) return <StatusTag status={task.status} />
 
@@ -119,7 +119,7 @@ function InlineStatusSelect({ task, profile }) {
   )
 }
 
-export default function TaskTable({ tasks, profile, onRowClick, selectedTaskId, loading }) {
+export default function TaskTable({ tasks, profile, workspaceMember, onRowClick, selectedTaskId, loading }) {
   const [sort, setSort] = useState({ column: 'updated_at', direction: 'desc' })
   const qc = useQueryClient()
 
@@ -234,7 +234,7 @@ export default function TaskTable({ tasks, profile, onRowClick, selectedTaskId, 
 
                   {/* Status */}
                   <td className="px-4 py-3 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                    <InlineStatusSelect task={task} profile={profile} />
+                    <InlineStatusSelect task={task} profile={profile} workspaceMember={workspaceMember} />
                   </td>
 
                   {/* Assignee */}
@@ -263,7 +263,7 @@ export default function TaskTable({ tasks, profile, onRowClick, selectedTaskId, 
 
                   {/* Actions */}
                   <td className="px-2 py-3" onClick={(e) => e.stopPropagation()}>
-                    {canEditTask(profile, task) && (
+                    {canEditTask(profile, task, workspaceMember) && (
                       <DropdownMenu.Root>
                         <DropdownMenu.Trigger asChild>
                           <button className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors outline-none">

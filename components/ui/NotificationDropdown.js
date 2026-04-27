@@ -6,7 +6,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import * as Popover from '@radix-ui/react-popover'
 import { Bell, CheckCheck } from 'lucide-react'
 import {
-  fetchUnreadNotifications,
+  fetchNotifications,
   markNotificationRead,
   markAllNotificationsRead,
   subscribeToNotifications,
@@ -18,12 +18,14 @@ export default function NotificationDropdown({ userId }) {
   const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
 
-  const { data: notifications = [] } = useQuery({
+  const { data = { unread: [], seen: [] } } = useQuery({
     queryKey: ['notifications', userId],
-    queryFn: () => fetchUnreadNotifications(),
+    queryFn: fetchNotifications,
     enabled: !!userId,
     refetchInterval: 60_000,
   })
+
+  const { unread, seen } = data
 
   useEffect(() => {
     if (!userId) return
@@ -44,12 +46,12 @@ export default function NotificationDropdown({ userId }) {
   })
 
   async function handleNotificationClick(n) {
-    await markRead.mutateAsync(n.id)
+    if (!n.is_read) await markRead.mutateAsync(n.id)
     setOpen(false)
     router.push(`/dashboard/tasks?task=${n.task_id}`)
   }
 
-  const count = notifications.length
+  const count = unread.length
 
   return (
     <Popover.Root open={open} onOpenChange={setOpen}>
@@ -86,24 +88,53 @@ export default function NotificationDropdown({ userId }) {
           </div>
 
           <div className="max-h-80 overflow-y-auto scrollbar-thin">
-            {notifications.length === 0 ? (
+            {unread.length === 0 && seen.length === 0 ? (
               <div className="py-10 text-center">
                 <Bell className="h-8 w-8 text-slate-300 dark:text-slate-600 mx-auto mb-2" />
                 <p className="text-sm text-slate-500 dark:text-slate-400">All caught up!</p>
               </div>
             ) : (
-              notifications.map((n) => (
-                <button
-                  key={n.id}
-                  onClick={() => handleNotificationClick(n)}
-                  className="w-full text-left px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors border-b border-slate-50 dark:border-slate-700 last:border-0"
-                >
-                  <p className="text-sm text-slate-700 dark:text-slate-200 line-clamp-2">{n.message}</p>
-                  <p className="text-xs text-slate-400 mt-1">
-                    {formatDistanceToNow(new Date(n.created_at), { addSuffix: true })}
-                  </p>
-                </button>
-              ))
+              <>
+                {unread.length === 0 && (
+                  <div className="py-4 text-center">
+                    <p className="text-xs text-slate-400 dark:text-slate-500">No new notifications</p>
+                  </div>
+                )}
+                {unread.map((n) => (
+                  <button
+                    key={n.id}
+                    onClick={() => handleNotificationClick(n)}
+                    className="w-full text-left px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors border-b border-slate-50 dark:border-slate-700 last:border-0"
+                  >
+                    <p className="text-sm text-slate-700 dark:text-slate-200 line-clamp-2">{n.message}</p>
+                    <p className="text-xs text-slate-400 mt-1">
+                      {formatDistanceToNow(new Date(n.created_at), { addSuffix: true })}
+                    </p>
+                  </button>
+                ))}
+
+                {seen.length > 0 && (
+                  <>
+                    <div className="px-4 py-2 border-t border-slate-100 dark:border-slate-700">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                        Earlier
+                      </p>
+                    </div>
+                    {seen.map((n) => (
+                      <button
+                        key={n.id}
+                        onClick={() => handleNotificationClick(n)}
+                        className="w-full text-left px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors border-b border-slate-50 dark:border-slate-700 last:border-0 opacity-60"
+                      >
+                        <p className="text-sm text-slate-500 dark:text-slate-400 line-clamp-2">{n.message}</p>
+                        <p className="text-xs text-slate-400 mt-1">
+                          {formatDistanceToNow(new Date(n.created_at), { addSuffix: true })}
+                        </p>
+                      </button>
+                    ))}
+                  </>
+                )}
+              </>
             )}
           </div>
         </Popover.Content>

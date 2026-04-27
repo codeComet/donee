@@ -17,7 +17,8 @@ Enable Google OAuth in Supabase Dashboard → Auth → Providers.
 ## Commands
 
 ```bash
-npm run dev          # Start dev server (port 3000)
+npm run dev          # Start dev server (loads .env.dev.local)
+npm run dev:prod     # Start dev server against prod Supabase (loads .env.prod.local)
 npm run build        # Production build
 npm run lint         # ESLint
 npm run test         # Vitest (once)
@@ -60,6 +61,10 @@ app/
     layout.js                 Guard: super_admin only
     page.js                   Server: fetch all users+projects
     AdminClient.js            Tabs: UsersTab, ProjectsTab
+  workspace/
+    page.js                   Server: list memberships/workspaces → onboarding UI
+    WorkspaceOnboarding.js    Client: create/join/switch workspace
+    actions.js                Server actions: create/join/switch, set workspace cookie
 
 components/
   providers/QueryProvider.js  React Query client (staleTime=60s, no refetchOnFocus)
@@ -88,20 +93,29 @@ components/
 
 lib/
   supabase.js                 createClient() browser | createServerSideClient(cookieStore) server
+  workspace.js                WORKSPACE_COOKIE + getWorkspaceId(cookieStore)
   utils.js                    cn(), getInitials(name), truncate(str, n=60)
-  permissions.js              ROLES const + 7 helper fns (isSuperAdmin, isPM, canEditTask, ...)
+  permissions.js              ROLES const + helper fns (optionally accept workspace member)
   notifications.js            fetchUnread, markRead, markAllRead, subscribeToNotifications
 
 supabase/
   migrations/001_init.sql     Schema: profiles, projects, project_members, tasks, task_notes, notifications
+  migrations/002_workspaces.sql  Workspaces tables + workspace_id on core entities + RLS
+  migrations/014_disable_auto_join_workspace.sql  New users do not auto-join; onboarding is create/join
+  migrations/004_fix_workspace_rls_recursion.sql  is_workspace_member() helper + non-recursive workspace RLS
+  migrations/013_grant_workspace_tables.sql  Grants for workspace tables (Data API / PostgREST)
 ```
 
-## Database Schema (6 tables)
+## Database Schema (Workspace-aware)
 
 All tables have RLS enabled.
 
 - **profiles** — mirrors auth.users (id, full_name, avatar_url, email, role)  
   role enum: `developer` (default) | `pm` | `super_admin`
+
+- **workspaces** — (id, name, created_by, created_at)
+- **workspace_members** — (id, workspace_id, user_id, role, joined_at)
+- **workspace_invitations** — (id, workspace_id, email, invite_code, invited_by, created_at, expires_at, accepted_at, accepted_by)
 
 - **projects** — (id, name, description, color hex, pm_id→profiles, created_by, created_at, is_archived)
 
@@ -110,11 +124,6 @@ All tables have RLS enabled.
 - **tasks** — (id, project_id, title, description, priority, status, assigned_to, created_by, estimation, url, created_at, updated_at)  
   priority: `lowest|low|medium|high|critical`  
   status: `backlog|in_progress|estimation|review|done_in_staging|waiting_for_confirmation|paused|done`
-
-- **task_notes** — (id, task_id, author_id, content, created_at, mentions uuid[])
-
-- **notifications** — (id, user_id, task_id, type, message, is_read, created_at)  
-  type: `task_assigned | note_mention`
 
 DB Triggers:
 
@@ -131,6 +140,12 @@ Realtime enabled on: `notifications`, `tasks`
 1. Login page → `supabase.auth.signInWithOAuth({ provider: 'google', redirectTo: /auth/callback })`
 2. `/auth/callback` → `exchangeCodeForSession(code)` → redirect `/dashboard`
 3. Middleware guards `/dashboard/*` and `/admin/*`; redirects authenticated users away from `/`
+
+## Workspaces
+
+- Current workspace selection is stored in an HTTP-only cookie: `donee_workspace_id`.
+- If an authenticated user hits `/dashboard` or `/admin` without the cookie, middleware redirects to `/workspace`.
+- Data is scoped by `workspace_id` across projects, tasks, task_notes, notifications, and project_members.
 
 ## Supabase Query Patterns
 

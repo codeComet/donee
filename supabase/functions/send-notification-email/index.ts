@@ -45,6 +45,20 @@ function jsonResponse(body: unknown, init?: ResponseInit) {
   })
 }
 
+// Extract task title from notification.message as fallback when DB query fails.
+// Trigger-generated messages always embed the title:
+//   task_created / note_mention → {creator} ... "{title}" ...
+//   task_assigned               → ... task: {title} in project ...
+function titleFromMessage(message: string | undefined | null, type: string): string | null {
+  if (!message) return null
+  const quoted = /"([^"]+)"/.exec(message)?.[1]
+  if (quoted) return quoted
+  if (type === 'task_assigned') {
+    return /task:\s*(.+?)\s+in project/.exec(message)?.[1] ?? null
+  }
+  return null
+}
+
 function isEnvTruthy(name: string) {
   const raw = (Deno.env.get(name) ?? '').trim().toLowerCase()
   return raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on'
@@ -142,7 +156,7 @@ serve(async (req: Request) => {
     }
 
     const notification = payload.record
-    const knownTypes = ['task_assigned', 'note_mention', 'task_created']
+    const knownTypes = ['task_assigned', 'note_mention', 'task_created', 'workspace_invite'] as const
     if (!knownTypes.includes(notification.type)) {
       return jsonResponse({ skipped: `unknown type: ${notification.type}` })
     }
@@ -189,24 +203,33 @@ serve(async (req: Request) => {
       ? await supabase.from('profiles').select('full_name').eq('id', actorId).single()
       : { data: null }
 
-    // Fetch task + project
-    const { data: task } = await supabase
-      .from('tasks')
-      .select('title, project:projects(name, pm_id)')
-      .eq('id', notification.task_id)
-      .single()
+    // Fetch task — use maybeSingle() (no error on missing row) and avoid
+    // embedded join which can fail silently if schema cache is stale
+    const { data: task } = notification.task_id
+      ? await supabase
+          .from('tasks')
+          .select('id, title, project_id')
+          .eq('id', notification.task_id)
+          .maybeSingle()
+      : { data: null }
+
+    const { data: project } = task?.project_id
+      ? await supabase
+          .from('projects')
+          .select('name, pm_id')
+          .eq('id', task.project_id)
+          .maybeSingle()
+      : { data: null }
 
     const appUrl = Deno.env.get('NEXT_PUBLIC_APP_URL') ?? 'http://localhost:3000'
     const taskLink = `${appUrl}/dashboard/tasks?task=${notification.task_id}`
-    // Default to Resend's shared domain (works on free plan, sends to any address)
     const emailFrom = Deno.env.get('EMAIL_FROM') ?? 'onboarding@resend.dev'
     const recipientName = profile?.full_name ?? 'there'
-    const taskTitle = task?.title ?? 'a task'
-    // @ts-ignore
-    const projectName = task?.project?.name ?? ''
-    // @ts-ignore
-    const projectPmId = task?.project?.pm_id ?? null
+    const taskTitle = task?.title ?? titleFromMessage(notification.message, notification.type) ?? 'a task'
+    const projectName = project?.name ?? ''
+    const projectPmId = project?.pm_id ?? null
     const actorName = actorProfile?.full_name ?? 'Someone'
+
 
     let subject = ''
     let htmlBody = ''
@@ -266,6 +289,19 @@ serve(async (req: Request) => {
         taskCard('New Task') +
         ctaButton('Review Task', taskLink) +
         emailFooter('You received this because you manage this project on Donee.')
+    }
+
+    else if (notification.type === 'workspace_invite') {
+      const workspaceLink = `${appUrl}/workspace`
+      subject = `[Donee] You've been added to a workspace`
+      htmlBody = emailHeader +
+        `<p style="color:#1e293b;font-size:16px;margin:0 0 16px;">Hi ${recipientName},</p>
+         <p style="color:#475569;font-size:15px;margin:0 0 4px;">${stripHtml(notification.message ?? 'You have been added to a workspace on Donee.')}</p>` +
+        `<div style="background:#f1f5f9;border-radius:8px;padding:16px 20px;margin:16px 0 24px;">
+           <p style="margin:0;font-size:14px;color:#1e293b;">Sign in to Donee to access your new workspace.</p>
+         </div>` +
+        ctaButton('Open Donee', workspaceLink) +
+        emailFooter('You received this because you were added to a workspace on Donee.')
     }
 
     // ── Send via Resend ──────────────────────────────────────────────────────

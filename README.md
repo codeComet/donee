@@ -7,6 +7,7 @@ A production-ready, full-stack task tracker for modern teams. Built with Next.js
 ## Features
 
 - **Google OAuth** — Sign in with Google only (no passwords)
+- **Workspaces** — Multi-workspace support with onboarding, switching, and invite codes
 - **Role-based access control** — `super_admin`, `pm`, `developer`
 - **Projects** — Color-coded, with PM assignment and member avatars
 - **Task management** — Priority, status, assignment, estimation, URL attachment
@@ -23,18 +24,18 @@ A production-ready, full-stack task tracker for modern teams. Built with Next.js
 
 ## Tech Stack
 
-| Layer       | Technology                       |
-|-------------|----------------------------------|
-| Framework   | Next.js 15 (App Router, JS)      |
-| Database    | Supabase (PostgreSQL + RLS)      |
-| Auth        | Supabase Auth (Google OAuth)     |
-| Styling     | Tailwind CSS                     |
-| Components  | Radix UI primitives (shadcn-style)|
-| Data fetch  | React Query (@tanstack/react-query)|
-| Charts      | Recharts                         |
-| Email       | Resend (via Supabase Edge Function)|
-| Dates       | date-fns                         |
-| Icons       | lucide-react                     |
+| Layer      | Technology                          |
+| ---------- | ----------------------------------- |
+| Framework  | Next.js 15 (App Router, JS)         |
+| Database   | Supabase (PostgreSQL + RLS)         |
+| Auth       | Supabase Auth (Google OAuth)        |
+| Styling    | Tailwind CSS                        |
+| Components | Radix UI primitives (shadcn-style)  |
+| Data fetch | React Query (@tanstack/react-query) |
+| Charts     | Recharts                            |
+| Email      | Resend (via Supabase Edge Function) |
+| Dates      | date-fns                            |
+| Icons      | lucide-react                        |
 
 ---
 
@@ -51,10 +52,10 @@ npm install
 ### 2. Configure environment variables
 
 ```bash
-cp .env.local.example .env.local
+cp .env.local.example .env.dev.local
 ```
 
-Edit `.env.local` and fill in:
+Edit `.env.dev.local` and fill in:
 
 ```env
 NEXT_PUBLIC_SUPABASE_URL=https://your-project-ref.supabase.co
@@ -64,6 +65,8 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
 EMAIL_FROM=noreply@donee.app
 RESEND_API_KEY=re_your_key   # optional — emails log to console if not set
 ```
+
+Optional: create `.env.prod.local` if you want to run the local dev server against your production Supabase project.
 
 ### 3. Run the Supabase migration
 
@@ -100,6 +103,7 @@ supabase secrets set NEXT_PUBLIC_APP_URL=https://your-production-url.com
 ```
 
 Then in Supabase Dashboard → **Database → Webhooks**, create a webhook:
+
 - **Table**: `notifications`
 - **Events**: `INSERT`
 - **URL**: `https://<project-ref>.supabase.co/functions/v1/send-notification-email`
@@ -112,6 +116,12 @@ npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000)
+
+To run locally against production Supabase data:
+
+```bash
+npm run dev:prod
+```
 
 ---
 
@@ -178,18 +188,18 @@ donee/
 
 ## Permissions Matrix
 
-| Action                     | super_admin | pm (own project) | developer |
-|----------------------------|:-----------:|:----------------:|:---------:|
-| View all projects          | ✓           | member only      | member only|
-| Create project             | ✓           | ✓                | ✗         |
-| Edit/archive project       | ✓           | ✓ (own)          | ✗         |
-| Add task                   | ✓           | ✓                | ✓ (member)|
-| Edit any task              | ✓           | ✓ (own project)  | ✗         |
-| Edit own assigned task     | ✓           | ✓                | ✓         |
-| Delete task                | ✓           | ✓                | ✓ (own)   |
-| Assign tasks               | ✓           | ✓                | ✗         |
-| Manage users/roles         | ✓           | ✗                | ✗         |
-| Access /admin              | ✓           | ✗                | ✗         |
+| Action                 | super_admin | pm (own project) |  developer  |
+| ---------------------- | :---------: | :--------------: | :---------: |
+| View all projects      |      ✓      |   member only    | member only |
+| Create project         |      ✓      |        ✓         |      ✗      |
+| Edit/archive project   |      ✓      |     ✓ (own)      |      ✗      |
+| Add task               |      ✓      |        ✓         | ✓ (member)  |
+| Edit any task          |      ✓      | ✓ (own project)  |      ✗      |
+| Edit own assigned task |      ✓      |        ✓         |      ✓      |
+| Delete task            |      ✓      |        ✓         |   ✓ (own)   |
+| Assign tasks           |      ✓      |        ✓         |      ✗      |
+| Manage users/roles     |      ✓      |        ✗         |      ✗      |
+| Access /admin          |      ✓      |        ✗         |      ✗      |
 
 ---
 
