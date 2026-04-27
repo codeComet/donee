@@ -7,36 +7,43 @@ import Spinner from '../components/Spinner'
 const ROLES = [
   { value: 'developer', label: 'Developer' },
   { value: 'pm', label: 'PM' },
-  { value: 'super_admin', label: 'Super Admin' },
+  { value: 'super_admin', label: 'Admin' },
 ]
 
-export default function AdminPage({ profile: currentUser }) {
-  const [users, setUsers] = useState([])
+export default function AdminPage({ profile: currentUser, workspaceId }) {
+  const [members, setMembers] = useState([])
   const [loading, setLoading] = useState(true)
   const [savingId, setSavingId] = useState(null)
   const [savedId, setSavedId] = useState(null)
 
   useEffect(() => {
-    fetchUsers()
-  }, [])
+    if (workspaceId) fetchMembers()
+  }, [workspaceId])
 
-  async function fetchUsers() {
+  async function fetchMembers() {
     setLoading(true)
     const { data } = await supabase
-      .from('profiles')
-      .select('id, full_name, email, avatar_url, role')
-      .order('full_name')
-    setUsers(data || [])
+      .from('workspace_members')
+      .select('id, user_id, role, user:profiles(id, full_name, email, avatar_url)')
+      .eq('workspace_id', workspaceId)
+      .order('user_id')
+    const sorted = (data || [])
+      .filter(m => m.user)
+      .sort((a, b) => (a.user.full_name ?? '').localeCompare(b.user.full_name ?? ''))
+    setMembers(sorted)
     setLoading(false)
   }
 
-  async function updateRole(userId, role) {
-    setSavingId(userId)
-    const { error } = await supabase.from('profiles').update({ role }).eq('id', userId)
+  async function updateRole(memberId, role) {
+    setSavingId(memberId)
+    const { error } = await supabase
+      .from('workspace_members')
+      .update({ role })
+      .eq('id', memberId)
     setSavingId(null)
     if (!error) {
-      setUsers(prev => prev.map(u => u.id === userId ? { ...u, role } : u))
-      setSavedId(userId)
+      setMembers(prev => prev.map(m => m.id === memberId ? { ...m, role } : m))
+      setSavedId(memberId)
       setTimeout(() => setSavedId(null), 1500)
     }
   }
@@ -44,7 +51,7 @@ export default function AdminPage({ profile: currentUser }) {
   return (
     <div className="flex flex-col h-full">
       <div className="px-3 py-2.5 border-b border-slate-100 flex-shrink-0">
-        <p className="text-xs font-semibold text-slate-700">{users.length} team members</p>
+        <p className="text-xs font-semibold text-slate-700">{members.length} workspace members</p>
       </div>
 
       <div className="popup-scroll flex-1">
@@ -62,26 +69,26 @@ export default function AdminPage({ profile: currentUser }) {
             ))}
           </div>
         ) : (
-          users.map(user => (
-            <div key={user.id} className="flex items-center gap-2.5 px-3 py-2.5 border-b border-slate-100 hover:bg-slate-50">
-              <Avatar name={user.full_name} avatarUrl={user.avatar_url} size="sm" className="flex-shrink-0" />
+          members.map(member => (
+            <div key={member.id} className="flex items-center gap-2.5 px-3 py-2.5 border-b border-slate-100 hover:bg-slate-50">
+              <Avatar name={member.user.full_name} avatarUrl={member.user.avatar_url} size="sm" className="flex-shrink-0" />
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-medium text-slate-900 truncate">
-                  {user.full_name}
-                  {user.id === currentUser.id && <span className="ml-1 text-[10px] text-slate-400">(you)</span>}
+                  {member.user.full_name}
+                  {member.user_id === currentUser.id && <span className="ml-1 text-[10px] text-slate-400">(you)</span>}
                 </p>
-                <p className="text-[10px] text-slate-400 truncate">{user.email}</p>
+                <p className="text-[10px] text-slate-400 truncate">{member.user.email}</p>
               </div>
               <div className="flex items-center gap-1.5 flex-shrink-0">
-                {savingId === user.id ? (
+                {savingId === member.id ? (
                   <Spinner size="sm" />
-                ) : savedId === user.id ? (
+                ) : savedId === member.id ? (
                   <Check className="w-4 h-4 text-green-500" />
                 ) : null}
                 <select
-                  value={user.role}
-                  onChange={e => updateRole(user.id, e.target.value)}
-                  disabled={savingId === user.id}
+                  value={member.role}
+                  onChange={e => updateRole(member.id, e.target.value)}
+                  disabled={savingId === member.id}
                   className="text-xs border border-slate-200 rounded-lg px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-60"
                 >
                   {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}

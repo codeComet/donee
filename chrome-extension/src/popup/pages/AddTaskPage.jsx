@@ -5,7 +5,7 @@ import { canAssignTask, isSuperAdmin, isPM } from '../lib/permissions'
 import { STATUS_OPTIONS, PRIORITY_OPTIONS } from '../lib/utils'
 import Spinner from '../components/Spinner'
 
-export default function AddTaskPage({ profile }) {
+export default function AddTaskPage({ profile, workspaceId }) {
   const [projects, setProjects] = useState([])
   const [members, setMembers] = useState([])
   const [loading, setLoading] = useState(true)
@@ -24,25 +24,17 @@ export default function AddTaskPage({ profile }) {
 
   const fetchProjects = useCallback(async () => {
     setLoading(true)
-    let q = supabase.from('projects').select('id, name, color').eq('is_archived', false).order('name')
+    // All workspace members can see projects scoped to their workspace
+    // RLS enforces visibility; filter by workspace_id for correctness
+    let q = supabase
+      .from('projects')
+      .select('id, name, color')
+      .eq('is_archived', false)
+      .eq('workspace_id', workspaceId)
+      .order('name')
 
-    if (isSuperAdmin(profile)) {
-      // sees all projects
-    } else if (isPM(profile)) {
-      // only projects they manage
+    if (isPM(profile) && !isSuperAdmin(profile)) {
       q = q.eq('pm_id', profile.id)
-    } else {
-      // developer: projects they're a member of OR have assigned tasks in
-      const [{ data: memberRows }, { data: taskRows }] = await Promise.all([
-        supabase.from('project_members').select('project_id').eq('user_id', profile.id),
-        supabase.from('tasks').select('project_id').eq('assigned_to', profile.id),
-      ])
-      const ids = [...new Set([
-        ...(memberRows?.map(r => r.project_id) || []),
-        ...(taskRows?.map(r => r.project_id) || []),
-      ])]
-      if (ids.length > 0) q = q.in('id', ids)
-      else { setProjects([]); setLoading(false); return }
     }
 
     const { data } = await q
@@ -50,18 +42,25 @@ export default function AddTaskPage({ profile }) {
     setProjects(list)
     if (list.length > 0) setForm(f => ({ ...f, project_id: list[0].id }))
     setLoading(false)
-  }, [profile.id, profile.role])
+  }, [profile.id, profile.role, workspaceId])
 
   useEffect(() => { fetchProjects() }, [fetchProjects])
 
   useEffect(() => {
-    if (canAssignTask(profile) && form.project_id) fetchMembers(form.project_id)
-  }, [form.project_id])
+    if (canAssignTask(profile) && workspaceId) fetchMembers()
+  }, [workspaceId])
 
-  async function fetchMembers(_projectId) {
-    // super admin and PM can assign to anyone
-    const { data } = await supabase.from('profiles').select('id, full_name').order('full_name')
-    setMembers(data || [])
+  async function fetchMembers() {
+    const { data } = await supabase
+      .from('workspace_members')
+      .select('user_id, role, user:profiles(id, full_name)')
+      .eq('workspace_id', workspaceId)
+      .order('user_id')
+    const members = (data || [])
+      .filter(m => m.user)
+      .map(m => ({ id: m.user.id, full_name: m.user.full_name }))
+      .sort((a, b) => (a.full_name ?? '').localeCompare(b.full_name ?? ''))
+    setMembers(members)
   }
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
@@ -78,6 +77,7 @@ export default function AddTaskPage({ profile }) {
         title: form.title.trim(),
         description: form.description || null,
         project_id: form.project_id,
+        workspace_id: workspaceId,
         priority: form.priority || null,
         status: form.status || 'backlog',
         assigned_to: form.assigned_to || null,
@@ -119,7 +119,7 @@ export default function AddTaskPage({ profile }) {
         <p className="text-xs text-slate-500 mt-1">
           {isPM(profile) && !isSuperAdmin(profile)
             ? 'You have no projects assigned as PM.'
-            : 'Join a project to create tasks.'}
+            : 'No projects in this workspace yet.'}
         </p>
       </div>
     )

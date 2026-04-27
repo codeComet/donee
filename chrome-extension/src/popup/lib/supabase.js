@@ -29,3 +29,15 @@ export async function getStoredSession() {
 export async function clearStoredSession() {
   return new Promise(resolve => chrome.storage.local.remove(['donee_auth'], resolve))
 }
+
+export async function getStoredWorkspaceId() {
+  return new Promise(resolve => chrome.storage.local.get(['donee_workspace_id'], r => resolve(r.donee_workspace_id ?? null)))
+}
+
+export async function setStoredWorkspaceId(workspaceId) {
+  return new Promise(resolve => chrome.storage.local.set({ donee_workspace_id: workspaceId }, resolve))
+}
+
+export async function clearStoredWorkspaceId() {
+  return new Promise(resolve => chrome.storage.local.remove(['donee_workspace_id'], resolve))
+}

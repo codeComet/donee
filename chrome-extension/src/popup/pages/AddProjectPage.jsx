@@ -10,7 +10,7 @@ const COLORS = [
   '#0ea5e9', '#64748b',
 ]
 
-export default function AddProjectPage({ profile }) {
+export default function AddProjectPage({ profile, workspaceId }) {
   const [pms, setPms] = useState([])
   const [saving, setSaving] = useState(false)
   const [success, setSuccess] = useState(null)
@@ -23,16 +23,21 @@ export default function AddProjectPage({ profile }) {
   })
 
   useEffect(() => {
-    if (isSuperAdmin(profile)) fetchPMs()
-  }, [])
+    if (isSuperAdmin(profile) && workspaceId) fetchPMs()
+  }, [workspaceId])
 
   async function fetchPMs() {
     const { data } = await supabase
-      .from('profiles')
-      .select('id, full_name')
+      .from('workspace_members')
+      .select('user_id, role, user:profiles(id, full_name)')
+      .eq('workspace_id', workspaceId)
       .in('role', ['pm', 'super_admin'])
-      .order('full_name')
-    setPms(data || [])
+      .order('user_id')
+    const list = (data || [])
+      .filter(m => m.user)
+      .map(m => ({ id: m.user.id, full_name: m.user.full_name }))
+      .sort((a, b) => (a.full_name ?? '').localeCompare(b.full_name ?? ''))
+    setPms(list)
   }
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
@@ -50,6 +55,7 @@ export default function AddProjectPage({ profile }) {
         color: form.color,
         pm_id: form.pm_id || null,
         created_by: profile.id,
+        workspace_id: workspaceId,
       })
       .select('name')
       .single()
