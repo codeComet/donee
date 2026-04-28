@@ -4,7 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
-import { canAccessAdmin } from '@/lib/permissions'
+import { canAccessAdmin, isPM } from '@/lib/permissions'
 import Avatar from '@/components/ui/Avatar'
 import WorkspaceSwitcher from '@/components/workspace/WorkspaceSwitcher'
 import {
@@ -22,9 +22,11 @@ export default function Sidebar({ profile, projects, workspaces = [], currentWor
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
 
+  const tasksLabel = isPM(profile, workspaceMember) ? 'All Tasks' : 'My Tasks'
+
   const navLinks = [
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, exact: true },
-    { href: '/dashboard/tasks', label: 'All Tasks', icon: ListTodo },
+    { href: '/dashboard/tasks', label: tasksLabel, icon: ListTodo },
   ]
 
   function isActive(href, exact) {

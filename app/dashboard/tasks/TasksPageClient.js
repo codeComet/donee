@@ -9,7 +9,7 @@ import AddTaskModal from '@/components/tasks/AddTaskModal'
 import TaskDrawer from '@/components/tasks/TaskDrawer'
 import { Plus } from 'lucide-react'
 
-async function fetchTasks(workspaceId) {
+async function fetchTasks(workspaceId, taskFilter) {
   const supabase = createClient()
   let query = supabase
     .from('tasks')
@@ -21,12 +21,21 @@ async function fetchTasks(workspaceId) {
     )
     .order('updated_at', { ascending: false })
   if (workspaceId) query = query.eq('workspace_id', workspaceId)
+  if (taskFilter?.type === 'assigned') {
+    query = query.eq('assigned_to', taskFilter.userId)
+  } else if (taskFilter?.type === 'pm_projects') {
+    if (taskFilter.projectIds?.length > 0) {
+      query = query.in('project_id', taskFilter.projectIds)
+    } else {
+      return []
+    }
+  }
   const { data, error } = await query
   if (error) throw error
   return data ?? []
 }
 
-export default function TasksPageClient({ initialTasks, projects, users, profile, workspaceMember, openTaskId, workspaceId }) {
+export default function TasksPageClient({ initialTasks, projects, users, profile, workspaceMember, openTaskId, workspaceId, taskFilter, pageTitle = 'All Tasks' }) {
   const [filters, setFilters] = useState({
     search: '',
     projectIds: [],
@@ -40,9 +49,10 @@ export default function TasksPageClient({ initialTasks, projects, users, profile
   const [addModalOpen, setAddModalOpen] = useState(false)
 
   const { data: tasks } = useQuery({
-    queryKey: ['tasks', workspaceId],
-    queryFn: () => fetchTasks(workspaceId),
+    queryKey: ['tasks', workspaceId, taskFilter],
+    queryFn: () => fetchTasks(workspaceId, taskFilter),
     initialData: initialTasks,
+    initialDataUpdatedAt: Date.now(),
     staleTime: 30_000,
   })
 
@@ -64,7 +74,7 @@ export default function TasksPageClient({ initialTasks, projects, users, profile
     <div className="space-y-4 max-w-7xl mx-auto">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">All Tasks</h1>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">{pageTitle}</h1>
           <p className="text-slate-500 dark:text-slate-400 text-sm mt-0.5">{filtered.length} task{filtered.length !== 1 ? 's' : ''}</p>
         </div>
         <button
