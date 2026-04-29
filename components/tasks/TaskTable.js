@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase'
-import { canEditTask } from '@/lib/permissions'
+import { canEditTask, canDeleteTask } from '@/lib/permissions'
 import { cn, truncate } from '@/lib/utils'
 import ProjectBadge from '@/components/ui/Badge'
 import PriorityTag from '@/components/ui/PriorityTag'
@@ -283,16 +283,20 @@ export default function TaskTable({ tasks, profile, workspaceMember, onRowClick,
                               <Pencil className="h-3.5 w-3.5 text-slate-400" />
                               Edit
                             </DropdownMenu.Item>
-                            <DropdownMenu.Separator className="my-1 border-t border-slate-100 dark:border-slate-700" />
-                            <DropdownMenu.Item
-                              className="flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 cursor-pointer outline-none"
-                              onSelect={() => {
-                                if (confirm('Delete this task?')) deleteMutation.mutate(task.id)
-                              }}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                              Delete
-                            </DropdownMenu.Item>
+                            {canDeleteTask(profile, workspaceMember) && (
+                              <>
+                                <DropdownMenu.Separator className="my-1 border-t border-slate-100 dark:border-slate-700" />
+                                <DropdownMenu.Item
+                                  className="flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 cursor-pointer outline-none"
+                                  onSelect={() => {
+                                    if (confirm('Delete this task?')) deleteMutation.mutate(task.id)
+                                  }}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                  Delete
+                                </DropdownMenu.Item>
+                              </>
+                            )}
                           </DropdownMenu.Content>
                         </DropdownMenu.Portal>
                       </DropdownMenu.Root>
