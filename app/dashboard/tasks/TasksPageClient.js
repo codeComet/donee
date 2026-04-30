@@ -1,13 +1,15 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase'
 import TaskTable from '@/components/tasks/TaskTable'
 import TaskFilters from '@/components/tasks/TaskFilters'
 import AddTaskModal from '@/components/tasks/AddTaskModal'
 import TaskDrawer from '@/components/tasks/TaskDrawer'
-import { Plus } from 'lucide-react'
+import { Plus, Loader2 } from 'lucide-react'
+
+const PAGE_SIZE = 30
 
 async function fetchTasks(workspaceId, taskFilter) {
   const supabase = createClient()
@@ -47,6 +49,8 @@ export default function TasksPageClient({ initialTasks, projects, users, profile
   })
   const [selectedTaskId, setSelectedTaskId] = useState(openTaskId)
   const [addModalOpen, setAddModalOpen] = useState(false)
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
+  const sentinelRef = useRef(null)
 
   const { data: tasks } = useQuery({
     queryKey: ['tasks', workspaceId, taskFilter],
@@ -56,7 +60,7 @@ export default function TasksPageClient({ initialTasks, projects, users, profile
     staleTime: 30_000,
   })
 
-  // Client-side filtering
+  // Client-side filtering — always applied to full dataset
   const filtered = tasks.filter((t) => {
     if (filters.search && !t.title.toLowerCase().includes(filters.search.toLowerCase())) return false
     if (filters.projectIds.length && !filters.projectIds.includes(t.project_id)) return false
@@ -67,6 +71,42 @@ export default function TasksPageClient({ initialTasks, projects, users, profile
     if (filters.dateTo && new Date(t.created_at) > new Date(filters.dateTo + 'T23:59:59')) return false
     return true
   })
+
+  const hasFilters = !!(
+    filters.search ||
+    filters.projectIds.length ||
+    filters.statuses.length ||
+    filters.priorities.length ||
+    filters.assigneeIds.length ||
+    filters.dateFrom ||
+    filters.dateTo
+  )
+
+  // Reset visible count when filters change
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE)
+  }, [filters])
+
+  // Infinite scroll via IntersectionObserver
+  useEffect(() => {
+    if (hasFilters) return
+    const sentinel = sentinelRef.current
+    if (!sentinel) return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setVisibleCount((v) => v + PAGE_SIZE)
+        }
+      },
+      { threshold: 0.1 }
+    )
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [hasFilters, visibleCount, filtered.length])
+
+  // When filters active: show all matches; otherwise paginate
+  const displayedTasks = hasFilters ? filtered : filtered.slice(0, visibleCount)
+  const hasMore = !hasFilters && visibleCount < filtered.length
 
   const selectedTask = tasks.find((t) => t.id === selectedTaskId) ?? null
 
@@ -94,12 +134,18 @@ export default function TasksPageClient({ initialTasks, projects, users, profile
       />
 
       <TaskTable
-        tasks={filtered}
+        tasks={displayedTasks}
         profile={profile}
         workspaceMember={workspaceMember}
         onRowClick={(task) => setSelectedTaskId(task.id)}
         selectedTaskId={selectedTaskId}
       />
+
+      {hasMore && (
+        <div ref={sentinelRef} className="flex justify-center py-6">
+          <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
+        </div>
+      )}
 
       {selectedTask && (
         <TaskDrawer

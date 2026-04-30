@@ -44,7 +44,7 @@ export default function Topbar({ user, profile, workspace, workspaceMember }) {
   }
 
   return (
-    <header className="h-14 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 flex items-center px-6 gap-4 flex-shrink-0 z-10">
+    <header className="h-16 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 flex items-center px-6 gap-4 flex-shrink-0 z-10">
       {/* Breadcrumb */}
       <nav className="flex-1 flex items-center gap-1 min-w-0 text-sm ml-10 md:ml-0">
         {crumbs.map((crumb, i) => (
