@@ -1,3 +1,13 @@
+## Prompt Quality Check
+
+Before starting any task, briefly review the request:
+
+- If the goal, context, or expected output is unclear, state what's missing and ask one clarifying question before proceeding.
+- If the prompt is clear, confirm your understanding in one sentence and proceed.
+- Never refuse to attempt a task due to vagueness — always make a reasonable attempt.
+- Give the prompter feedback about the quality of their prompt
+
+
 # Donee — Task Tracker
 
 Full-stack project management / task tracker. Next.js 15.3 (App Router, JavaScript, no TypeScript) + Supabase (Postgres + RLS + Realtime + Edge Functions) + Tailwind CSS + Radix UI + React Query v5.

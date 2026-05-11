@@ -26,13 +26,21 @@ export async function createWorkspace(formData) {
   // in server actions — service role is safe here since we verify auth above
   // and explicitly set created_by + user_id.
   let db = supabase
-  if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    const { createClient } = await import('@supabase/supabase-js')
-    db = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY,
-      { auth: { persistSession: false, autoRefreshToken: false } }
-    )
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (serviceKey) {
+    let isServiceRole = false
+    try {
+      const payload = JSON.parse(atob(serviceKey.split('.')[1]))
+      isServiceRole = payload.role === 'service_role'
+    } catch {}
+    if (isServiceRole) {
+      const { createClient } = await import('@supabase/supabase-js')
+      db = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL,
+        serviceKey,
+        { auth: { persistSession: false, autoRefreshToken: false } }
+      )
+    }
   }
 
   const { data: workspace, error: wsError } = await db
