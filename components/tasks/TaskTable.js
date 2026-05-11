@@ -204,7 +204,7 @@ export default function TaskTable({ tasks, profile, workspaceMember, onRowClick,
                       <div className="relative inline-flex">
                         <ProjectBadge project={task.project} />
                         {activeProjectIds?.has(task.project_id) && (
-                          <span className="absolute -top-1 -right-1 w-2 h-2 bg-indigo-500 rounded-full ring-1 ring-white dark:ring-slate-800" />
+                          <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full ring-1 ring-white dark:ring-slate-800" />
                         )}
                       </div>
                     ) : (

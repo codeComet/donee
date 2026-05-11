@@ -50,6 +50,13 @@ export default function TasksPageClient({ initialTasks, projects, users, profile
   const [selectedTaskId, setSelectedTaskId] = useState(openTaskId)
   const [addModalOpen, setAddModalOpen] = useState(false)
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
+  const [seenTaskIds, setSeenTaskIds] = useState(() => {
+    if (typeof window === 'undefined') return new Set()
+    try {
+      const stored = localStorage.getItem(`donee_seen_${profile.id}`)
+      return new Set(stored ? JSON.parse(stored) : [])
+    } catch { return new Set() }
+  })
   const sentinelRef = useRef(null)
 
   const { data: tasks } = useQuery({
@@ -130,20 +137,34 @@ export default function TasksPageClient({ initialTasks, projects, users, profile
   const drawerTask = selectedTask ?? externalTask ?? null
   const taskNotFound = !!selectedTaskId && !selectedTask && !externalTaskLoading && externalTask === null
 
-  // Projects with task activity in the last 24 hours
+  function handleRowClick(task) {
+    setSelectedTaskId(task.id)
+    setSeenTaskIds((prev) => {
+      if (prev.has(task.id)) return prev
+      const next = new Set(prev)
+      next.add(task.id)
+      try {
+        localStorage.setItem(`donee_seen_${profile.id}`, JSON.stringify([...next]))
+      } catch {}
+      return next
+    })
+  }
+
+  // Projects with unseen task activity in the last 24h assigned to the current user
   const activeProjectIds = useMemo(() => {
     const cutoff = Date.now() - 24 * 60 * 60 * 1000
     const ids = new Set()
     tasks.forEach((t) => {
       if (
-        new Date(t.updated_at).getTime() > cutoff ||
-        new Date(t.created_at).getTime() > cutoff
+        t.assigned_to === profile.id &&
+        !seenTaskIds.has(t.id) &&
+        (new Date(t.updated_at).getTime() > cutoff || new Date(t.created_at).getTime() > cutoff)
       ) {
         ids.add(t.project_id)
       }
     })
     return ids
-  }, [tasks])
+  }, [tasks, profile.id, seenTaskIds])
 
   return (
     <div className="space-y-4 max-w-7xl mx-auto">
@@ -172,7 +193,7 @@ export default function TasksPageClient({ initialTasks, projects, users, profile
         tasks={displayedTasks}
         profile={profile}
         workspaceMember={workspaceMember}
-        onRowClick={(task) => setSelectedTaskId(task.id)}
+        onRowClick={handleRowClick}
         selectedTaskId={selectedTaskId}
         activeProjectIds={activeProjectIds}
       />
