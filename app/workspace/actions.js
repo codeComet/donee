@@ -21,41 +21,9 @@ export async function createWorkspace(formData) {
   } = await supabase.auth.getUser()
   if (!user) return { error: 'Not authenticated' }
 
-  // Use service role to bypass RLS for workspace creation.
-  // auth.uid() in RLS context can be NULL when JWT forwarding is unreliable
-  // in server actions — service role is safe here since we verify auth above
-  // and explicitly set created_by + user_id.
-  let db = supabase
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-  if (serviceKey) {
-    let isServiceRole = false
-    try {
-      const payload = JSON.parse(atob(serviceKey.split('.')[1]))
-      isServiceRole = payload.role === 'service_role'
-    } catch {}
-    if (isServiceRole) {
-      const { createClient } = await import('@supabase/supabase-js')
-      db = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL,
-        serviceKey,
-        { auth: { persistSession: false, autoRefreshToken: false } }
-      )
-    }
-  }
-
-  const { data: workspace, error: wsError } = await db
-    .from('workspaces')
-    .insert({ name, created_by: user.id })
-    .select('id')
-    .single()
-
+  const { data: workspaceId, error: wsError } = await supabase.rpc('create_workspace', { p_name: name })
   if (wsError) return { error: wsError.message }
-
-  const { error: memberError } = await db
-    .from('workspace_members')
-    .insert({ workspace_id: workspace.id, user_id: user.id, role: 'super_admin' })
-
-  if (memberError) return { error: memberError.message }
+  const workspace = { id: workspaceId }
 
   cookieStore.set(WORKSPACE_COOKIE, workspace.id, cookieOpts())
   redirect('/dashboard')
