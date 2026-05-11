@@ -182,7 +182,7 @@ function SelectField({
 }
 
 // ── Main drawer ───────────────────────────────────────────────────────────────
-export default function TaskDrawer({ task, isOpen, onClose, profile, workspaceMember, users }) {
+export default function TaskDrawer({ task, taskNotFound = false, isOpen, onClose, profile, workspaceMember, users }) {
   const qc = useQueryClient();
   const overlayRef = useRef(null);
   const [descEditing, setDescEditing] = useState(false);
@@ -277,6 +277,41 @@ export default function TaskDrawer({ task, isOpen, onClose, profile, workspaceMe
   const canEdit = canEditTask(profile, task, workspaceMember);
   const canAssign = canAssignTask(profile, workspaceMember);
   const projectMembers = users ?? [];
+
+  if (taskNotFound) {
+    return (
+      <>
+        {isOpen && (
+          <div
+            className="fixed inset-0 bg-black/30 z-40 animate-fade-in"
+            onClick={onClose}
+          />
+        )}
+        <div
+          className={cn(
+            "fixed top-0 right-0 h-full z-50 flex flex-col bg-white dark:bg-slate-800 shadow-2xl transition-transform duration-300 ease-out",
+            "w-full sm:w-[520px]",
+            isOpen ? "translate-x-0" : "translate-x-full",
+          )}
+        >
+          <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-700">
+            <span className="text-sm font-medium text-slate-500 dark:text-slate-400">Task not found</span>
+            <button
+              onClick={onClose}
+              className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+          <div className="flex-1 flex flex-col items-center justify-center gap-3 p-8 text-center">
+            <Trash2 className="h-10 w-10 text-slate-300 dark:text-slate-600" />
+            <p className="text-base font-medium text-slate-600 dark:text-slate-300">This task has been deleted</p>
+            <p className="text-sm text-slate-400 dark:text-slate-500">It may have been removed by another team member.</p>
+          </div>
+        </div>
+      </>
+    );
+  }
 
   if (!task) return null;
 
