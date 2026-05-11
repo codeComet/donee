@@ -2,6 +2,7 @@ import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { createServerSideClient } from '@/lib/supabase'
 import { getWorkspaceId } from '@/lib/workspace'
+import { isSuperAdmin, isPM } from '@/lib/permissions'
 import StatCards from '@/components/dashboard/StatCards'
 import TaskChart from '@/components/dashboard/TaskChart'
 import ProjectGrid from '@/components/dashboard/ProjectGrid'
@@ -20,21 +21,60 @@ export default async function DashboardPage() {
   const workspaceId = getWorkspaceId(cookieStore)
   if (!workspaceId) redirect('/workspace')
 
+  const [{ data: profile }, { data: workspaceMember }] = await Promise.all([
+    supabase.from('profiles').select('*').eq('id', user.id).single(),
+    supabase.from('workspace_members').select('role').eq('workspace_id', workspaceId).eq('user_id', user.id).single(),
+  ])
+
+  const isDeveloper = !isSuperAdmin(profile, workspaceMember) && !isPM(profile, workspaceMember)
+
+  // For developers, scope to projects they're a member of or have assigned tasks
+  let devProjectIds = null
+  if (isDeveloper) {
+    const [{ data: memberRows }, { data: assignedRows }] = await Promise.all([
+      supabase.from('project_members').select('project_id').eq('user_id', user.id),
+      supabase.from('tasks').select('project_id').eq('workspace_id', workspaceId).eq('assigned_to', user.id),
+    ])
+    devProjectIds = [...new Set([
+      ...(memberRows ?? []).map((r) => r.project_id),
+      ...(assignedRows ?? []).map((r) => r.project_id),
+    ])]
+  }
+
+  const noProjects = isDeveloper && devProjectIds.length === 0
+  const nullId = '00000000-0000-0000-0000-000000000000'
+
   // ── Stats ───────────────────────────────────────────────
+  let projectCountQuery = supabase.from('projects').select('*', { count: 'exact', head: true })
+    .eq('workspace_id', workspaceId).eq('is_archived', false)
+  let taskCountQuery = supabase.from('tasks').select('*', { count: 'exact', head: true })
+    .eq('workspace_id', workspaceId)
+  let completedCountQuery = supabase.from('tasks').select('*', { count: 'exact', head: true })
+    .eq('workspace_id', workspaceId).eq('status', 'done')
+
+  if (isDeveloper) {
+    if (noProjects) {
+      projectCountQuery = projectCountQuery.eq('id', nullId)
+      taskCountQuery = taskCountQuery.eq('id', nullId)
+      completedCountQuery = completedCountQuery.eq('id', nullId)
+    } else {
+      projectCountQuery = projectCountQuery.in('id', devProjectIds)
+      taskCountQuery = taskCountQuery.in('project_id', devProjectIds)
+      completedCountQuery = completedCountQuery.in('project_id', devProjectIds)
+    }
+  }
+
   const [
     { count: totalProjects },
     { count: totalTasks },
     { count: myTasks },
     { count: completedTasks },
   ] = await Promise.all([
-    supabase.from('projects').select('*', { count: 'exact', head: true })
-      .eq('workspace_id', workspaceId).eq('is_archived', false),
-    supabase.from('tasks').select('*', { count: 'exact', head: true })
-      .eq('workspace_id', workspaceId),
+    projectCountQuery,
+    taskCountQuery,
     supabase.from('tasks').select('*', { count: 'exact', head: true })
       .eq('workspace_id', workspaceId).eq('assigned_to', user.id),
-    supabase.from('tasks').select('*', { count: 'exact', head: true })
-      .eq('workspace_id', workspaceId).eq('status', 'done'),
+    completedCountQuery,
   ])
 
   // ── Chart data: tasks created/completed per day (last 14 days) ───────────
@@ -74,7 +114,7 @@ export default async function DashboardPage() {
   }))
 
   // ── Projects with task counts ─────────────────────────────────────────────
-  const { data: projects } = await supabase
+  let projectGridQuery = supabase
     .from('projects')
     .select(
       `id, name, description, color,
@@ -85,6 +125,14 @@ export default async function DashboardPage() {
     .eq('is_archived', false)
     .order('created_at', { ascending: false })
     .limit(12)
+
+  if (isDeveloper) {
+    projectGridQuery = noProjects
+      ? projectGridQuery.eq('id', nullId)
+      : projectGridQuery.in('id', devProjectIds)
+  }
+
+  const { data: projects } = await projectGridQuery
 
   const projectsWithCounts = (projects ?? []).map((p) => {
     const byStatus = {}

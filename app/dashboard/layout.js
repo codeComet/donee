@@ -2,6 +2,7 @@ import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { createServerSideClient } from '@/lib/supabase'
 import { getWorkspaceId } from '@/lib/workspace'
+import { isSuperAdmin, isPM } from '@/lib/permissions'
 import Sidebar from '@/components/layout/Sidebar'
 import Topbar from '@/components/layout/Topbar'
 
@@ -64,13 +65,29 @@ export default async function DashboardLayout({ children }) {
     })
     .filter(Boolean)
 
-  // Fetch projects scoped to this workspace
-  const { data: projects } = await supabase
+  // Fetch projects scoped to this workspace (developers see only their projects)
+  let projectQuery = supabase
     .from('projects')
     .select('id, name, color')
     .eq('workspace_id', workspaceId)
     .eq('is_archived', false)
     .order('created_at', { ascending: false })
+
+  if (!isSuperAdmin(profile, workspaceMember) && !isPM(profile, workspaceMember)) {
+    const [{ data: memberRows }, { data: assignedRows }] = await Promise.all([
+      supabase.from('project_members').select('project_id').eq('user_id', user.id),
+      supabase.from('tasks').select('project_id').eq('workspace_id', workspaceId).eq('assigned_to', user.id),
+    ])
+    const devProjectIds = [...new Set([
+      ...(memberRows ?? []).map((r) => r.project_id),
+      ...(assignedRows ?? []).map((r) => r.project_id),
+    ])]
+    projectQuery = devProjectIds.length > 0
+      ? projectQuery.in('id', devProjectIds)
+      : projectQuery.eq('id', '00000000-0000-0000-0000-000000000000')
+  }
+
+  const { data: projects } = await projectQuery
 
   const workspace = workspaceData
 
