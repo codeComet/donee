@@ -67,7 +67,7 @@ export default async function TasksPage({ searchParams }) {
 
   const { data: tasks } = await taskQuery
 
-  // Projects for filter dropdown — PM sees only their projects
+  // Projects for filter dropdown — scoped by role
   let projectQuery = supabase
     .from('projects')
     .select('id, name, color')
@@ -77,6 +77,19 @@ export default async function TasksPage({ searchParams }) {
 
   if (isProjectManager && !isAdmin) {
     projectQuery = projectQuery.eq('pm_id', user.id)
+  } else if (!isAdmin && !isProjectManager) {
+    // Developer: only projects they're a member of or have assigned tasks
+    const [{ data: memberRows }, { data: assignedRows }] = await Promise.all([
+      supabase.from('project_members').select('project_id').eq('user_id', user.id),
+      supabase.from('tasks').select('project_id').eq('workspace_id', workspaceId).eq('assigned_to', user.id),
+    ])
+    const devProjectIds = [...new Set([
+      ...(memberRows ?? []).map((r) => r.project_id),
+      ...(assignedRows ?? []).map((r) => r.project_id),
+    ])]
+    projectQuery = devProjectIds.length > 0
+      ? projectQuery.in('id', devProjectIds)
+      : projectQuery.eq('id', '00000000-0000-0000-0000-000000000000')
   }
 
   const { data: projects } = await projectQuery
