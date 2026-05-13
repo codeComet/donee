@@ -457,6 +457,13 @@ export default function TaskDrawer({ task, taskNotFound = false, isOpen, onClose
             onSave={(v) => updateTask.mutate({ url: v })}
             canEdit={canEdit}
           />
+          <EditableField
+            label="Deadline"
+            value={task.deadline}
+            type="date"
+            onSave={(v) => updateTask.mutate({ deadline: v || null })}
+            canEdit={canEdit}
+          />
 
           {/* Description — WYSIWYG */}
           <div>
