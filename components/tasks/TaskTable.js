@@ -172,7 +172,7 @@ export default function TaskTable({ tasks, profile, workspaceMember, onRowClick,
               <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
                 Est.
               </th>
-              <SortHeader label="Updated" column="updated_at" sortState={sort} onSort={handleSort} />
+              <SortHeader label="Deadline" column="deadline" sortState={sort} onSort={handleSort} />
               <th className="px-4 py-3 w-10" />
             </tr>
           </thead>
@@ -261,9 +261,15 @@ export default function TaskTable({ tasks, profile, workspaceMember, onRowClick,
                     <span className="text-slate-500 dark:text-slate-400 text-xs">{task.estimation ?? '—'}</span>
                   </td>
 
-                  {/* Updated */}
-                  <td className="px-4 py-3">
-                    <RelativeDate date={task.updated_at} />
+                  {/* Deadline */}
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    {task.deadline ? (
+                      <span className="text-slate-600 dark:text-slate-300 text-xs">
+                        {format(new Date(task.deadline), 'MMM d, yyyy')}
+                      </span>
+                    ) : (
+                      <span className="text-slate-400 text-xs">N/A</span>
+                    )}
                   </td>
 
                   {/* Actions */}
