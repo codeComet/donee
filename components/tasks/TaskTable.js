@@ -119,7 +119,7 @@ function InlineStatusSelect({ task, profile, workspaceMember }) {
   )
 }
 
-export default function TaskTable({ tasks, profile, workspaceMember, onRowClick, selectedTaskId, loading }) {
+export default function TaskTable({ tasks, profile, workspaceMember, onRowClick, selectedTaskId, loading, activeProjectIds }) {
   const [sort, setSort] = useState({ column: 'updated_at', direction: 'desc' })
   const qc = useQueryClient()
 
@@ -201,7 +201,12 @@ export default function TaskTable({ tasks, profile, workspaceMember, onRowClick,
                   {/* Project */}
                   <td className="px-4 py-3 whitespace-nowrap">
                     {task.project ? (
-                      <ProjectBadge project={task.project} />
+                      <div className="relative inline-flex">
+                        <ProjectBadge project={task.project} />
+                        {activeProjectIds?.has(task.project_id) && (
+                          <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full ring-1 ring-white dark:ring-slate-800" />
+                        )}
+                      </div>
                     ) : (
                       <span className="text-slate-400">—</span>
                     )}
@@ -210,7 +215,7 @@ export default function TaskTable({ tasks, profile, workspaceMember, onRowClick,
                   {/* Title */}
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2 min-w-0">
-                      <span className="font-medium text-slate-800 dark:text-slate-100 truncate max-w-[240px]">
+                      <span className="font-medium text-slate-800 dark:text-slate-100">
                         {task.title}
                       </span>
                       {task.url && (

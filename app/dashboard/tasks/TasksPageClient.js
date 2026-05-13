@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase'
 import TaskTable from '@/components/tasks/TaskTable'
@@ -50,6 +50,13 @@ export default function TasksPageClient({ initialTasks, projects, users, profile
   const [selectedTaskId, setSelectedTaskId] = useState(openTaskId)
   const [addModalOpen, setAddModalOpen] = useState(false)
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
+  const [seenTaskIds, setSeenTaskIds] = useState(() => {
+    if (typeof window === 'undefined') return new Set()
+    try {
+      const stored = localStorage.getItem(`donee_seen_${profile.id}`)
+      return new Set(stored ? JSON.parse(stored) : [])
+    } catch { return new Set() }
+  })
   const sentinelRef = useRef(null)
 
   const { data: tasks } = useQuery({
@@ -110,6 +117,55 @@ export default function TasksPageClient({ initialTasks, projects, users, profile
 
   const selectedTask = tasks.find((t) => t.id === selectedTaskId) ?? null
 
+  // Fetch task by ID when not in the current list (e.g., opened via notification)
+  const { data: externalTask, isLoading: externalTaskLoading } = useQuery({
+    queryKey: ['task-by-id', selectedTaskId],
+    queryFn: async () => {
+      const supabase = createClient()
+      const { data } = await supabase
+        .from('tasks')
+        .select(`*, project:projects(id, name, color), assignee:profiles!tasks_assigned_to_fkey(id, full_name, avatar_url), creator:profiles!tasks_created_by_fkey(id, full_name)`)
+        .eq('id', selectedTaskId)
+        .maybeSingle()
+      return data ?? null
+    },
+    enabled: !!selectedTaskId && !selectedTask,
+    retry: false,
+    staleTime: 30_000,
+  })
+
+  const drawerTask = selectedTask ?? externalTask ?? null
+  const taskNotFound = !!selectedTaskId && !selectedTask && !externalTaskLoading && externalTask === null
+
+  function handleRowClick(task) {
+    setSelectedTaskId(task.id)
+    setSeenTaskIds((prev) => {
+      if (prev.has(task.id)) return prev
+      const next = new Set(prev)
+      next.add(task.id)
+      try {
+        localStorage.setItem(`donee_seen_${profile.id}`, JSON.stringify([...next]))
+      } catch {}
+      return next
+    })
+  }
+
+  // Projects with unseen task activity in the last 24h assigned to the current user
+  const activeProjectIds = useMemo(() => {
+    const cutoff = Date.now() - 24 * 60 * 60 * 1000
+    const ids = new Set()
+    tasks.forEach((t) => {
+      if (
+        t.assigned_to === profile.id &&
+        !seenTaskIds.has(t.id) &&
+        (new Date(t.updated_at).getTime() > cutoff || new Date(t.created_at).getTime() > cutoff)
+      ) {
+        ids.add(t.project_id)
+      }
+    })
+    return ids
+  }, [tasks, profile.id, seenTaskIds])
+
   return (
     <div className="space-y-4 max-w-7xl mx-auto">
       <div className="flex items-center justify-between">
@@ -137,8 +193,9 @@ export default function TasksPageClient({ initialTasks, projects, users, profile
         tasks={displayedTasks}
         profile={profile}
         workspaceMember={workspaceMember}
-        onRowClick={(task) => setSelectedTaskId(task.id)}
+        onRowClick={handleRowClick}
         selectedTaskId={selectedTaskId}
+        activeProjectIds={activeProjectIds}
       />
 
       {hasMore && (
@@ -147,9 +204,10 @@ export default function TasksPageClient({ initialTasks, projects, users, profile
         </div>
       )}
 
-      {selectedTask && (
+      {!!selectedTaskId && (
         <TaskDrawer
-          task={selectedTask}
+          task={drawerTask}
+          taskNotFound={taskNotFound}
           profile={profile}
           workspaceMember={workspaceMember}
           projects={projects}

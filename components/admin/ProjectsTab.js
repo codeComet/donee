@@ -342,10 +342,32 @@ export default function ProjectsTab({ initialProjects, users, workspaceId }) {
         });
         if (error) throw error;
       }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["admin-projects", workspaceId] });
-      setCreateOpen(false);
+    onMutate: async (form) => {
+      await qc.cancelQueries({ queryKey: ["admin-projects", workspaceId] });
+      const prev = qc.getQueryData(["admin-projects", workspaceId]);
+      const pm = users?.find((u) => u.id === form.pm_id) ?? null;
+      qc.setQueryData(["admin-projects", workspaceId], (old) => [
+        {
+          id: `_temp_${Date.now()}`,
+          workspace_id: workspaceId,
+          name: form.name,
+          description: form.description || null,
+          color: form.color,
+          pm_id: form.pm_id || null,
+          is_archived: false,
+          created_at: new Date().toISOString(),
+          pm: pm ? { id: pm.id, full_name: pm.full_name, avatar_url: pm.avatar_url } : null,
+          members: [],
+        },
+        ...(old ?? []),
+      ]);
+      return { prev };
     },
+    onError: (_, __, ctx) => {
+      if (ctx?.prev !== undefined) qc.setQueryData(["admin-projects", workspaceId], ctx.prev);
+    },
+    onSuccess: () => setCreateOpen(false),
+    onSettled: () => qc.invalidateQueries({ queryKey: ["admin-projects", workspaceId] }),
   });
 
   const updateProject = useMutation({
@@ -362,10 +384,24 @@ export default function ProjectsTab({ initialProjects, users, workspaceId }) {
           .eq("id", id);
         if (error) throw error;
       }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["admin-projects", workspaceId] });
-      setEditTarget(null);
+    onMutate: async ({ id, form }) => {
+      await qc.cancelQueries({ queryKey: ["admin-projects", workspaceId] });
+      const prev = qc.getQueryData(["admin-projects", workspaceId]);
+      const pm = users?.find((u) => u.id === form.pm_id) ?? null;
+      qc.setQueryData(["admin-projects", workspaceId], (old) =>
+        (old ?? []).map((p) =>
+          p.id === id
+            ? { ...p, name: form.name, description: form.description, color: form.color, pm_id: form.pm_id || null, pm: pm ? { id: pm.id, full_name: pm.full_name, avatar_url: pm.avatar_url } : null }
+            : p,
+        ),
+      );
+      return { prev };
     },
+    onError: (_, __, ctx) => {
+      if (ctx?.prev !== undefined) qc.setQueryData(["admin-projects", workspaceId], ctx.prev);
+    },
+    onSuccess: () => setEditTarget(null),
+    onSettled: () => qc.invalidateQueries({ queryKey: ["admin-projects", workspaceId] }),
   });
 
   const toggleArchive = useMutation({
@@ -377,7 +413,18 @@ export default function ProjectsTab({ initialProjects, users, workspaceId }) {
           .eq("id", id);
         if (error) throw error;
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-projects", workspaceId] }),
+    onMutate: async ({ id, archive }) => {
+      await qc.cancelQueries({ queryKey: ["admin-projects", workspaceId] });
+      const prev = qc.getQueryData(["admin-projects", workspaceId]);
+      qc.setQueryData(["admin-projects", workspaceId], (old) =>
+        (old ?? []).map((p) => (p.id === id ? { ...p, is_archived: archive } : p)),
+      );
+      return { prev };
+    },
+    onError: (_, __, ctx) => {
+      if (ctx?.prev !== undefined) qc.setQueryData(["admin-projects", workspaceId], ctx.prev);
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ["admin-projects", workspaceId] }),
   });
 
   const addProjectMember = useMutation({
@@ -391,10 +438,26 @@ export default function ProjectsTab({ initialProjects, users, workspaceId }) {
           );
         if (error) throw error;
       }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["admin-projects", workspaceId] });
-      setMembersTarget(null);
+    onMutate: async ({ projectId, userId }) => {
+      await qc.cancelQueries({ queryKey: ["admin-projects", workspaceId] });
+      const prev = qc.getQueryData(["admin-projects", workspaceId]);
+      const user = users?.find((u) => u.id === userId);
+      if (user) {
+        qc.setQueryData(["admin-projects", workspaceId], (old) =>
+          (old ?? []).map((p) =>
+            p.id === projectId
+              ? { ...p, members: [...(p.members ?? []), { user: { id: user.id, full_name: user.full_name, avatar_url: user.avatar_url } }] }
+              : p,
+          ),
+        );
+      }
+      return { prev };
     },
+    onError: (_, __, ctx) => {
+      if (ctx?.prev !== undefined) qc.setQueryData(["admin-projects", workspaceId], ctx.prev);
+    },
+    onSuccess: () => setMembersTarget(null),
+    onSettled: () => qc.invalidateQueries({ queryKey: ["admin-projects", workspaceId] }),
   });
 
   return (
