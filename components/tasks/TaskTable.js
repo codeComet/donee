@@ -215,7 +215,7 @@ export default function TaskTable({ tasks, profile, workspaceMember, onRowClick,
                   {/* Title */}
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2 min-w-0">
-                      <span className="font-medium text-slate-800 dark:text-slate-100 truncate max-w-[240px]">
+                      <span className="font-medium text-slate-800 dark:text-slate-100">
                         {task.title}
                       </span>
                       {task.url && (
