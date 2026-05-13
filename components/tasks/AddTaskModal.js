@@ -35,6 +35,7 @@ const INITIAL_FORM = {
   estimation: '',
   url: '',
   description: '',
+  deadline: '',
 }
 
 export default function AddTaskModal({
@@ -93,6 +94,7 @@ export default function AddTaskModal({
         estimation: form.estimation || null,
         url: form.url || null,
         description: form.description || null,
+        deadline: form.deadline || null,
         created_by: profile.id,
       }
       const { data, error } = await supabase
@@ -290,6 +292,16 @@ export default function AddTaskModal({
                     placeholder="https://…"
                     value={form.url}
                     onChange={(e) => update('url', e.target.value)}
+                    className={inputClass}
+                  />
+                </div>
+
+                <div>
+                  <label className={labelClass}>Deadline</label>
+                  <input
+                    type="date"
+                    value={form.deadline}
+                    onChange={(e) => update('deadline', e.target.value)}
                     className={inputClass}
                   />
                 </div>

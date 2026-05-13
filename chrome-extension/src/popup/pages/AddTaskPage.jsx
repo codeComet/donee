@@ -20,6 +20,7 @@ export default function AddTaskPage({ profile, workspaceId }) {
     status: 'backlog',
     assigned_to: canAssignTask(profile) ? '' : profile.id,
     estimation: '',
+    deadline: '',
   })
 
   const fetchProjects = useCallback(async () => {
@@ -82,6 +83,7 @@ export default function AddTaskPage({ profile, workspaceId }) {
         status: form.status || 'backlog',
         assigned_to: form.assigned_to || null,
         estimation: form.estimation ? parseFloat(form.estimation) : null,
+        deadline: form.deadline || null,
         created_by: profile.id,
       })
       .select('title, project:projects(name)')
@@ -101,6 +103,7 @@ export default function AddTaskPage({ profile, workspaceId }) {
       status: 'backlog',
       assigned_to: canAssignTask(profile) ? '' : profile.id,
       estimation: '',
+      deadline: '',
     })
   }
 
@@ -214,6 +217,16 @@ export default function AddTaskPage({ profile, workspaceId }) {
           value={form.estimation}
           onChange={e => set('estimation', e.target.value)}
           placeholder="e.g. 2.5"
+          className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        />
+      </div>
+
+      <div>
+        <label className="block text-xs font-medium text-slate-600 mb-1">Deadline</label>
+        <input
+          type="date"
+          value={form.deadline}
+          onChange={e => set('deadline', e.target.value)}
           className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
         />
       </div>
