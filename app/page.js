@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase";
 import AuthLayout, {
   AuthAlert,
   AuthSubmitButton,
+  MIN_PASSWORD_LENGTH,
   authInputClass,
   authLinkClass,
 } from "@/components/auth/AuthLayout";
@@ -121,7 +122,7 @@ export default function LoginPage() {
         <input
           type="password"
           required
-          minLength={6}
+          minLength={mode === "signin" ? undefined : MIN_PASSWORD_LENGTH}
           autoComplete={mode === "signin" ? "current-password" : "new-password"}
           placeholder="Password"
           value={password}

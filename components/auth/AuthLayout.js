@@ -2,6 +2,9 @@
 
 import { cn } from "@/lib/utils";
 
+// Must match Supabase Dashboard → Auth → Providers → Email → Minimum password length
+export const MIN_PASSWORD_LENGTH = 8;
+
 export const authInputClass =
   "w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent";
 

@@ -33,6 +33,34 @@ interface WebhookPayload {
   schema: string
 }
 
+// Escape user-controlled values (task titles, names) before putting them into email HTML
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+// Only the Postgres webhook (which sends the service-role key) may call this function.
+// With verify_jwt on, the gateway accepts ANY valid project JWT — including the public
+// anon key and every user's access token — so the role must be checked here too.
+function isAuthorizedCaller(req: Request): boolean {
+  const token = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '')
+  if (!token) return false
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? Deno.env.get('SERVICE_ROLE_KEY') ?? ''
+  if (serviceKey && token === serviceKey) return true
+  try {
+    const payloadPart = token.split('.')[1]
+    if (!payloadPart) return false
+    const json = atob(payloadPart.replace(/-/g, '+').replace(/_/g, '/'))
+    return JSON.parse(json)?.role === 'service_role'
+  } catch {
+    return false
+  }
+}
+
 // Strip HTML tags for plain-text email fallback
 function stripHtml(html: string): string {
   return html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
@@ -113,15 +141,15 @@ serve(async (req: Request) => {
     return new Response('ok', { headers: corsHeaders })
   }
 
+  if (!isAuthorizedCaller(req)) {
+    return jsonResponse({ error: 'Unauthorized' }, { status: 401 })
+  }
+
   if (req.method === 'GET') {
-    const rawDisabled = Deno.env.get('EMAIL_NOTIFICATIONS_DISABLED') ?? null
     return jsonResponse({
       ok: true,
       emailNotificationsDisabled: isEnvTruthy('EMAIL_NOTIFICATIONS_DISABLED'),
-      emailNotificationsDisabledRaw: rawDisabled,
       hasResendApiKey: !!Deno.env.get('RESEND_API_KEY'),
-      emailFrom: Deno.env.get('EMAIL_FROM') ?? null,
-      appUrl: Deno.env.get('NEXT_PUBLIC_APP_URL') ?? null,
       ...runtimeMeta(),
     })
   }
@@ -224,11 +252,14 @@ serve(async (req: Request) => {
     const appUrl = Deno.env.get('NEXT_PUBLIC_APP_URL') ?? 'http://localhost:3000'
     const taskLink = `${appUrl}/dashboard/tasks?task=${notification.task_id}`
     const emailFrom = Deno.env.get('EMAIL_FROM') ?? 'onboarding@resend.dev'
-    const recipientName = profile?.full_name ?? 'there'
-    const taskTitle = task?.title ?? titleFromMessage(notification.message, notification.type) ?? 'a task'
-    const projectName = project?.name ?? ''
+    const recipientName = escapeHtml(profile?.full_name ?? 'there')
+    const rawTaskTitle = task?.title ?? titleFromMessage(notification.message, notification.type) ?? 'a task'
+    const taskTitle = escapeHtml(rawTaskTitle)
+    const projectName = escapeHtml(project?.name ?? '')
     const projectPmId = project?.pm_id ?? null
-    const actorName = actorProfile?.full_name ?? 'Someone'
+    const rawActorName = actorProfile?.full_name ?? 'Someone'
+    const actorName = escapeHtml(rawActorName)
+    const messageText = (fallback = '') => escapeHtml(stripHtml(notification.message ?? fallback))
 
 
     let subject = ''
@@ -262,7 +293,7 @@ serve(async (req: Request) => {
       `<a href="${href}" style="display:inline-block;background:#4f46e5;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px;">${text}</a>`
 
     if (notification.type === 'task_assigned') {
-      subject = `[Donee] Assigned to you: ${taskTitle}`
+      subject = `[Donee] Assigned to you: ${rawTaskTitle}`
       htmlBody = emailHeader +
         `<p style="color:#1e293b;font-size:16px;margin:0 0 16px;">Hi ${recipientName},</p>
          <p style="color:#475569;font-size:15px;margin:0 0 4px;">You've been assigned a new task.</p>` +
@@ -272,20 +303,20 @@ serve(async (req: Request) => {
     }
 
     else if (notification.type === 'note_mention') {
-      subject = `[Donee] You were mentioned: ${taskTitle}`
+      subject = `[Donee] You were mentioned: ${rawTaskTitle}`
       htmlBody = emailHeader +
         `<p style="color:#1e293b;font-size:16px;margin:0 0 16px;">Hi ${recipientName},</p>
-         <p style="color:#475569;font-size:15px;margin:0 0 4px;">${stripHtml(notification.message ?? '')}</p>` +
+         <p style="color:#475569;font-size:15px;margin:0 0 4px;">${messageText()}</p>` +
         taskCard('Task') +
         ctaButton('View Note', taskLink) +
         emailFooter('You received this because someone mentioned you in a note on Donee.')
     }
 
     else if (notification.type === 'task_created') {
-      subject = `[Donee] New task created: ${taskTitle}`
+      subject = `[Donee] New task created: ${rawTaskTitle}`
       htmlBody = emailHeader +
         `<p style="color:#1e293b;font-size:16px;margin:0 0 16px;">Hi ${recipientName},</p>
-         <p style="color:#475569;font-size:15px;margin:0 0 4px;">${stripHtml(notification.message ?? '')}</p>` +
+         <p style="color:#475569;font-size:15px;margin:0 0 4px;">${messageText()}</p>` +
         taskCard('New Task') +
         ctaButton('Review Task', taskLink) +
         emailFooter('You received this because you manage this project on Donee.')
@@ -296,7 +327,7 @@ serve(async (req: Request) => {
       subject = `[Donee] You've been added to a workspace`
       htmlBody = emailHeader +
         `<p style="color:#1e293b;font-size:16px;margin:0 0 16px;">Hi ${recipientName},</p>
-         <p style="color:#475569;font-size:15px;margin:0 0 4px;">${stripHtml(notification.message ?? 'You have been added to a workspace on Donee.')}</p>` +
+         <p style="color:#475569;font-size:15px;margin:0 0 4px;">${messageText('You have been added to a workspace on Donee.')}</p>` +
         `<div style="background:#f1f5f9;border-radius:8px;padding:16px 20px;margin:16px 0 24px;">
            <p style="margin:0;font-size:14px;color:#1e293b;">Sign in to Donee to access your new workspace.</p>
          </div>` +
@@ -333,7 +364,7 @@ serve(async (req: Request) => {
     if (isSelfAssigned && projectPmId && projectPmId !== notification.user_id) {
       const pmEmail = await getAuthEmailForUserId(projectPmId)
       if (pmEmail) {
-        const pmSubject = `[Donee] ${actorName} self-assigned: ${taskTitle}`
+        const pmSubject = `[Donee] ${rawActorName} self-assigned: ${rawTaskTitle}`
         const pmHtml =
           emailHeader +
           `<p style="color:#1e293b;font-size:16px;margin:0 0 16px;">Hi,</p>
@@ -358,6 +389,6 @@ serve(async (req: Request) => {
     return jsonResponse({ success: true, resendId: resendData?.id, ...extra })
   } catch (err) {
     console.error('Edge function error:', err)
-    return jsonResponse({ error: String(err) }, { status: 500 })
+    return jsonResponse({ error: 'Internal error', ...runtimeMeta() }, { status: 500 })
   }
 })
