@@ -4,6 +4,8 @@ import { supabase } from '../lib/supabase'
 import { canAssignTask, isSuperAdmin, isPM } from '../lib/permissions'
 import { STATUS_OPTIONS, PRIORITY_OPTIONS } from '../lib/utils'
 import Spinner from '../components/Spinner'
+import RichTextEditor from '../components/RichTextEditor'
+import ScreenshotPicker, { toScreenshot, validateScreenshot } from '../components/ScreenshotPicker'
 
 export default function AddTaskPage({ profile, workspaceId }) {
   const [projects, setProjects] = useState([])
@@ -12,6 +14,9 @@ export default function AddTaskPage({ profile, workspaceId }) {
   const [saving, setSaving] = useState(false)
   const [success, setSuccess] = useState(null)
   const [error, setError] = useState('')
+  const [screenshots, setScreenshots] = useState([])
+  // Bumped on reset so the editor remounts with empty content
+  const [formKey, setFormKey] = useState(0)
   const [form, setForm] = useState({
     title: '',
     description: '',
@@ -66,6 +71,54 @@ export default function AddTaskPage({ profile, workspaceId }) {
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
+  const addScreenshots = list => {
+    setError('')
+    setScreenshots(prev => [...prev, ...list])
+  }
+  const removeScreenshot = id => setScreenshots(prev => prev.filter(s => s.id !== id))
+
+  // Pasted images anywhere in the form become screenshots
+  useEffect(() => {
+    function onPaste(e) {
+      const images = Array.from(e.clipboardData?.items ?? [])
+        .filter(i => i.kind === 'file' && i.type.startsWith('image/'))
+        .map(i => i.getAsFile())
+        .filter(Boolean)
+      if (!images.length) return
+      e.preventDefault()
+      const valid = []
+      for (const f of images) {
+        const err = validateScreenshot(f)
+        if (err) setError(err)
+        else valid.push(toScreenshot(f, f.name && f.name !== 'image.png' ? f.name : `pasted-${Date.now()}.png`))
+      }
+      if (valid.length) addScreenshots(valid)
+    }
+    window.addEventListener('paste', onPaste)
+    return () => window.removeEventListener('paste', onPaste)
+  }, [])
+
+  // Uploads screenshots and adds them as a single note on the task
+  async function attachScreenshots(taskId) {
+    const urls = []
+    for (const [i, shot] of screenshots.entries()) {
+      const ext = (shot.blob.type.split('/')[1] || 'png').replace('jpeg', 'jpg')
+      const path = `${profile.id}/${Date.now()}-${i}.${ext}`
+      const { error: upErr } = await supabase.storage
+        .from('task-images')
+        .upload(path, shot.blob, { contentType: shot.blob.type })
+      if (upErr) throw upErr
+      urls.push(supabase.storage.from('task-images').getPublicUrl(path).data.publicUrl)
+    }
+    const html = urls.map((u, i) => `<img src="${u}" alt="Screenshot ${i + 1}">`).join('')
+    const { error: noteErr } = await supabase.from('task_notes').insert({
+      task_id: taskId,
+      author_id: profile.id,
+      content: html,
+    })
+    if (noteErr) throw noteErr
+  }
+
   async function handleSubmit(e) {
     e.preventDefault()
     if (!form.title.trim()) { setError('Title required'); return }
@@ -86,15 +139,27 @@ export default function AddTaskPage({ profile, workspaceId }) {
         deadline: form.deadline || null,
         created_by: profile.id,
       })
-      .select('title, project:projects(name)')
+      .select('id, title, project:projects(name)')
       .single()
+    if (err) { setSaving(false); setError(err.message); return }
+
+    let screenshotError = null
+    if (screenshots.length) {
+      try {
+        await attachScreenshots(data.id)
+      } catch (e) {
+        screenshotError = e.message || 'Screenshot upload failed'
+      }
+    }
     setSaving(false)
-    if (err) { setError(err.message); return }
-    setSuccess(data)
+    setSuccess({ ...data, screenshotCount: screenshotError ? 0 : screenshots.length, screenshotError })
   }
 
   function reset() {
     setSuccess(null)
+    screenshots.forEach(s => URL.revokeObjectURL(s.url))
+    setScreenshots([])
+    setFormKey(k => k + 1)
     setForm({
       title: '',
       description: '',
@@ -135,6 +200,16 @@ export default function AddTaskPage({ profile, workspaceId }) {
         <div>
           <p className="text-sm font-semibold text-slate-800">Task created!</p>
           <p className="text-xs text-slate-500 mt-1">"{success.title}" in {success.project?.name}</p>
+          {success.screenshotCount > 0 && (
+            <p className="text-xs text-slate-500 mt-1">
+              {success.screenshotCount} screenshot{success.screenshotCount > 1 ? 's' : ''} added to notes
+            </p>
+          )}
+          {success.screenshotError && (
+            <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2 mt-2">
+              Task was created, but screenshots couldn&apos;t be attached: {success.screenshotError}
+            </p>
+          )}
         </div>
         <button
           onClick={reset}
@@ -168,6 +243,29 @@ export default function AddTaskPage({ profile, workspaceId }) {
         >
           {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
+      </div>
+
+      <div>
+        <label className="block text-xs font-medium text-slate-600 mb-1">Description</label>
+        <RichTextEditor
+          key={formKey}
+          placeholder="Add details…"
+          onChange={html => set('description', html)}
+          // Images are handled by the window paste listener → screenshots
+          onPaste={e => Array.from(e.clipboardData?.items ?? []).some(i => i.type.startsWith('image/'))}
+        />
+      </div>
+
+      <div>
+        <label className="block text-xs font-medium text-slate-600 mb-1">
+          Screenshots {screenshots.length > 0 && <span className="text-slate-400">({screenshots.length})</span>}
+        </label>
+        <ScreenshotPicker
+          screenshots={screenshots}
+          onAdd={addScreenshots}
+          onRemove={removeScreenshot}
+          onError={setError}
+        />
       </div>
 
       <div className="grid grid-cols-2 gap-3">
@@ -239,7 +337,7 @@ export default function AddTaskPage({ profile, workspaceId }) {
         className="w-full flex items-center justify-center gap-2 py-2.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-60 transition-colors"
       >
         {saving && <Spinner size="sm" className="border-white border-t-transparent" />}
-        {saving ? 'Creating…' : 'Create Task'}
+        {saving ? (screenshots.length ? 'Creating & uploading…' : 'Creating…') : 'Create Task'}
       </button>
     </form>
   )

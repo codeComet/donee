@@ -50,3 +50,22 @@ html, body {
     animation: shimmer 1.5s infinite linear;
   }
 }
+
+/* Rich text (TipTap) — mirrors the web app's .rich-text styles */
+@layer components {
+  .rich-text .ProseMirror { outline: none; }
+  .rich-text .ProseMirror p.is-editor-empty:first-child::before {
+    content: attr(data-placeholder);
+    color: theme('colors.slate.400');
+    float: left;
+    pointer-events: none;
+    height: 0;
+  }
+  .rich-text p      { @apply mb-1 leading-relaxed; }
+  .rich-text strong { @apply font-semibold; }
+  .rich-text em     { @apply italic; }
+  .rich-text ul     { @apply list-disc list-inside mb-1; }
+  .rich-text ol     { @apply list-decimal list-inside mb-1; }
+  .rich-text li     { @apply mb-0.5; }
+  .rich-text li p   { @apply inline; }
+}
