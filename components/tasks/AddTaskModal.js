@@ -6,6 +6,9 @@ import { createClient } from '@/lib/supabase'
 import * as Dialog from '@radix-ui/react-dialog'
 import { cn } from '@/lib/utils'
 import { X, ChevronRight, ChevronLeft } from 'lucide-react'
+import RichTextEditor from '@/components/ui/RichTextEditor'
+import ScreenshotPicker from '@/components/tasks/ScreenshotPicker'
+import { attachScreenshotsAsNote, toScreenshot, validateScreenshot } from '@/lib/screenshots'
 
 const PRIORITIES = [
   { value: 'critical', label: 'Critical' },
@@ -59,7 +62,42 @@ export default function AddTaskModal({
     assigned_to: isDeveloper ? (profile?.id ?? '') : '',
   })
   const [errors, setErrors] = useState({})
+  const [screenshots, setScreenshots] = useState([])
+  const [screenshotError, setScreenshotError] = useState(null)
+  // Set when the task was created but its screenshots couldn't be attached
+  const [partialFailure, setPartialFailure] = useState(null)
   const qc = useQueryClient()
+
+  function addScreenshots(list) {
+    setScreenshotError(null)
+    setScreenshots((prev) => [...prev, ...list])
+  }
+
+  function removeScreenshot(id) {
+    setScreenshots((prev) => prev.filter((s) => s.id !== id))
+  }
+
+  function addPastedImages(files) {
+    const valid = []
+    for (const f of files) {
+      const err = validateScreenshot(f)
+      if (err) setScreenshotError(err)
+      else valid.push(toScreenshot(f, `pasted-${Date.now()}.${f.type.split('/')[1] || 'png'}`))
+    }
+    if (valid.length) addScreenshots(valid)
+  }
+
+  // Images pasted anywhere in the modal (the description editor handles its own)
+  function handlePaste(e) {
+    if (e.defaultPrevented || step !== 1) return
+    const files = Array.from(e.clipboardData?.items ?? [])
+      .filter((i) => i.kind === 'file' && i.type.startsWith('image/'))
+      .map((i) => i.getAsFile())
+      .filter(Boolean)
+    if (!files.length) return
+    e.preventDefault()
+    addPastedImages(files)
+  }
 
   function update(key, value) {
     setForm((f) => ({ ...f, [key]: value }))
@@ -108,9 +146,22 @@ export default function AddTaskModal({
         )
         .single()
       if (error) throw error
-      return data
+
+      let attachError = null
+      if (screenshots.length) {
+        try {
+          await attachScreenshotsAsNote(supabase, {
+            taskId: data.id,
+            authorId: profile.id,
+            screenshots,
+          })
+        } catch (err) {
+          attachError = err.message || 'Screenshot upload failed'
+        }
+      }
+      return { newTask: data, attachError }
     },
-    onSuccess: (newTask) => {
+    onSuccess: ({ newTask, attachError }) => {
       qc.setQueriesData({ queryKey: ['tasks'] }, (old) =>
         Array.isArray(old) ? [newTask, ...old.filter((t) => t.id !== newTask.id)] : [newTask]
       )
@@ -118,6 +169,11 @@ export default function AddTaskModal({
         Array.isArray(old) ? [newTask, ...old.filter((t) => t.id !== newTask.id)] : [newTask]
       )
       qc.invalidateQueries({ queryKey: ['tasks'] })
+      if (attachError) {
+        // Keep the modal open so the user sees what happened; retrying would duplicate the task
+        setPartialFailure(attachError)
+        return
+      }
       handleClose()
     },
   })
@@ -130,6 +186,11 @@ export default function AddTaskModal({
       assigned_to: isDeveloper ? (profile?.id ?? '') : '',
     })
     setErrors({})
+    screenshots.forEach((s) => URL.revokeObjectURL(s.url))
+    setScreenshots([])
+    setScreenshotError(null)
+    setPartialFailure(null)
+    createTask.reset()
     onClose()
   }
 
@@ -142,7 +203,8 @@ export default function AddTaskModal({
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 bg-black/40 z-50 animate-fade-in" />
         <Dialog.Content
-          className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-md bg-white dark:bg-slate-800 rounded-2xl shadow-2xl animate-fade-in overflow-hidden"
+          onPaste={handlePaste}
+          className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-lg bg-white dark:bg-slate-800 rounded-2xl shadow-2xl animate-fade-in overflow-hidden"
           aria-describedby="add-task-desc"
         >
           {/* Header */}
@@ -172,7 +234,7 @@ export default function AddTaskModal({
             </Dialog.Close>
           </div>
 
-          <div className="px-6 py-5">
+          <div className="px-6 py-5 max-h-[65vh] overflow-y-auto scrollbar-thin">
             {step === 1 && (
               <div className="space-y-4">
                 <div>
@@ -214,13 +276,29 @@ export default function AddTaskModal({
 
                 <div>
                   <label className={labelClass}>Description</label>
-                  <textarea
-                    placeholder="Optional description…"
-                    value={form.description}
-                    onChange={(e) => update('description', e.target.value)}
-                    rows={3}
-                    className={cn(inputClass, 'resize-none')}
+                  <RichTextEditor
+                    content={form.description}
+                    placeholder="Optional description… (@ to mention)"
+                    users={users}
+                    onChange={(html) => update('description', html === '<p></p>' ? '' : html)}
+                    onPasteImages={addPastedImages}
                   />
+                </div>
+
+                <div>
+                  <label className={labelClass}>
+                    Screenshots
+                    {screenshots.length > 0 && (
+                      <span className="ml-1 normal-case font-normal text-slate-400">({screenshots.length})</span>
+                    )}
+                  </label>
+                  <ScreenshotPicker
+                    screenshots={screenshots}
+                    onAdd={addScreenshots}
+                    onRemove={removeScreenshot}
+                    onError={setScreenshotError}
+                  />
+                  {screenshotError && <p className={errorClass}>{screenshotError}</p>}
                 </div>
               </div>
             )}
@@ -309,6 +387,12 @@ export default function AddTaskModal({
                 {createTask.error && (
                   <p className="text-sm text-red-500">{createTask.error.message}</p>
                 )}
+                {partialFailure && (
+                  <p className="text-sm text-red-500 bg-red-50 dark:bg-red-900/20 rounded-lg px-3 py-2">
+                    Task was created, but the screenshots couldn&apos;t be attached: {partialFailure}. You can
+                    add them from the task&apos;s notes.
+                  </p>
+                )}
               </div>
             )}
           </div>
@@ -342,13 +426,26 @@ export default function AddTaskModal({
                   Next
                   <ChevronRight className="h-4 w-4" />
                 </button>
+              ) : partialFailure ? (
+                <button
+                  onClick={handleClose}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl transition-colors"
+                >
+                  Done
+                </button>
               ) : (
                 <button
                   onClick={() => createTask.mutate()}
                   disabled={createTask.isPending}
                   className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  {createTask.isPending ? 'Creating…' : 'Create Task'}
+                  {createTask.isPending
+                    ? screenshots.length
+                      ? 'Creating & uploading…'
+                      : 'Creating…'
+                    : screenshots.length
+                      ? `Create Task (${screenshots.length} screenshot${screenshots.length > 1 ? 's' : ''})`
+                      : 'Create Task'}
                 </button>
               )}
             </div>

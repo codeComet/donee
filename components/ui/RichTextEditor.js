@@ -53,6 +53,7 @@ export default function RichTextEditor({
   onCancel, // cancel — description mode
   onSubmit, // submit(html) — notes mode (shows Send button)
   submitLabel = "Send",
+  onPasteImages, // if set, pasted images go here instead of into the content
   className,
 }) {
   const fileRef = useRef(null);
@@ -67,12 +68,14 @@ export default function RichTextEditor({
 
   // Refs to avoid stale closures in editorProps
   const onSubmitRef = useRef(null);
+  const onPasteImagesRef = useRef(null);
   const uploadRef = useRef(null);
   const editorRef = useRef(null);
   const mentionStateRef = useRef(null);
 
   // Keep refs current on every render
   onSubmitRef.current = onSubmit;
+  onPasteImagesRef.current = onPasteImages;
   mentionStateRef.current = mentionState;
 
   // ── Upload image ────────────────────────────────────────────────────────────
@@ -200,10 +203,16 @@ export default function RichTextEditor({
     editorProps: {
       handlePaste(view, event) {
         const items = Array.from(event.clipboardData?.items ?? []);
-        const img = items.find((i) => i.type.startsWith("image/"));
-        if (!img) return false;
+        const images = items.filter((i) => i.type.startsWith("image/"));
+        if (!images.length) return false;
         event.preventDefault();
-        uploadRef.current(img.getAsFile());
+        if (onPasteImagesRef.current) {
+          onPasteImagesRef.current(
+            images.map((i) => i.getAsFile()).filter(Boolean),
+          );
+        } else {
+          uploadRef.current(images[0].getAsFile());
+        }
         return true;
       },
       handleKeyDown(view, event) {
@@ -316,25 +325,29 @@ export default function RichTextEditor({
           >
             <ListOrdered className="h-3.5 w-3.5" />
           </ToolbarBtn>
-          <div className="w-px h-4 bg-slate-200 dark:bg-slate-600 mx-1" />
-          <ToolbarBtn
-            onClick={() => fileRef.current?.click()}
-            title="Upload image / screenshot"
-            disabled={uploading}
-          >
-            <ImageIcon className="h-3.5 w-3.5" />
-          </ToolbarBtn>
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) uploadRef.current(f);
-              e.target.value = "";
-            }}
-          />
+          {!onPasteImages && (
+            <>
+              <div className="w-px h-4 bg-slate-200 dark:bg-slate-600 mx-1" />
+              <ToolbarBtn
+                onClick={() => fileRef.current?.click()}
+                title="Upload image / screenshot"
+                disabled={uploading}
+              >
+                <ImageIcon className="h-3.5 w-3.5" />
+              </ToolbarBtn>
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) uploadRef.current(f);
+                  e.target.value = "";
+                }}
+              />
+            </>
+          )}
         </div>
       )}
 
