@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase";
 import AuthLayout, {
   AuthAlert,
   AuthSubmitButton,
+  MIN_PASSWORD_LENGTH,
   authInputClass,
   authLinkClass,
 } from "@/components/auth/AuthLayout";
@@ -32,6 +33,10 @@ export default function ResetPasswordPage() {
   async function handleSubmit(e) {
     e.preventDefault();
     setError(null);
+    if (password.length < MIN_PASSWORD_LENGTH) {
+      setError(`Password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
+      return;
+    }
     if (password !== confirm) {
       setError("Passwords don't match.");
       return;
@@ -70,7 +75,7 @@ export default function ResetPasswordPage() {
           <input
             type="password"
             required
-            minLength={6}
+            minLength={MIN_PASSWORD_LENGTH}
             autoComplete="new-password"
             placeholder="New password"
             value={password}
@@ -80,7 +85,7 @@ export default function ResetPasswordPage() {
           <input
             type="password"
             required
-            minLength={6}
+            minLength={MIN_PASSWORD_LENGTH}
             autoComplete="new-password"
             placeholder="Confirm new password"
             value={confirm}

@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase";
 import { canEditTask, canEditAllTaskFields, canAssignTask } from "@/lib/permissions";
 import { cn, truncate } from "@/lib/utils";
+import { sanitizeRichText, safeHref } from "@/lib/sanitize";
 import Avatar from "@/components/ui/Avatar";
 import PriorityTag from "@/components/ui/PriorityTag";
 import StatusTag, { statusConfig } from "@/components/ui/StatusTag";
@@ -41,7 +42,7 @@ function NoteBody({ content }) {
       {isHtml ? (
         <div
           className="rich-text"
-          dangerouslySetInnerHTML={{ __html: content }}
+          dangerouslySetInnerHTML={{ __html: sanitizeRichText(content) }}
         />
       ) : (
         <p className="whitespace-pre-wrap break-words">
@@ -111,9 +112,9 @@ function EditableField({ label, value, onSave, canEdit, type = "text" }) {
           )}
         >
           {value ? (
-            type === "url" ? (
+            type === "url" && safeHref(value) ? (
               <a
-                href={value}
+                href={safeHref(value)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-indigo-600 hover:underline truncate flex items-center gap-1"
@@ -496,7 +497,7 @@ export default function TaskDrawer({ task, taskNotFound = false, isOpen, onClose
                 {task.description ? (
                   <div
                     className="rich-text text-slate-700 dark:text-slate-200"
-                    dangerouslySetInnerHTML={{ __html: task.description }}
+                    dangerouslySetInnerHTML={{ __html: sanitizeRichText(task.description) }}
                   />
                 ) : (
                   <span className="text-slate-400 italic text-xs">

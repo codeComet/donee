@@ -1,6 +1,15 @@
 import { cookies } from 'next/headers'
 import { createServerSideClient } from '@/lib/supabase'
 
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 function stripHtml(html) {
   return html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
 }
@@ -49,12 +58,12 @@ export async function POST(request) {
 
   const resendApiKey = process.env.RESEND_API_KEY
   if (!resendApiKey) {
-    return Response.json({ error: 'Email service not configured (missing RESEND_API_KEY)' }, { status: 500 })
+    return Response.json({ error: 'Email service not configured' }, { status: 500 })
   }
 
   const emailFrom = process.env.EMAIL_FROM ?? 'onboarding@resend.dev'
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
-  const workspaceName = invitation.workspace?.name ?? 'a workspace'
+  const workspaceName = escapeHtml(invitation.workspace?.name ?? 'a workspace')
   const joinUrl = `${appUrl}/workspace`
 
   const html = `
@@ -69,7 +78,7 @@ export async function POST(request) {
     <p style="color:#475569;font-size:15px;margin:0 0 16px;">Use the invite code below to join:</p>
     <div style="background:#f1f5f9;border-radius:8px;padding:20px;margin:16px 0 24px;text-align:center;">
       <p style="margin:0;font-size:12px;color:#64748b;text-transform:uppercase;letter-spacing:.05em;font-weight:600;">Invite Code</p>
-      <p style="margin:8px 0 0;font-size:28px;font-weight:700;color:#4f46e5;letter-spacing:.1em;font-family:monospace;">${invitation.invite_code}</p>
+      <p style="margin:8px 0 0;font-size:28px;font-weight:700;color:#4f46e5;letter-spacing:.1em;font-family:monospace;">${escapeHtml(invitation.invite_code)}</p>
     </div>
     <a href="${joinUrl}" style="display:inline-block;background:#4f46e5;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px;">Join Workspace</a>
     <p style="color:#94a3b8;font-size:13px;margin:20px 0 0;">This invite expires in 7 days. Go to Donee → Join Workspace and enter the code above.</p>
@@ -89,15 +98,15 @@ export async function POST(request) {
     body: JSON.stringify({
       from: emailFrom,
       to: invitation.email,
-      subject: `[Donee] You're invited to join ${workspaceName}`,
+      subject: `[Donee] You're invited to join ${invitation.workspace?.name ?? 'a workspace'}`,
       html,
       text: stripHtml(html),
     }),
   })
 
   if (!res.ok) {
-    const raw = await res.text()
-    return Response.json({ error: `Email send failed: ${raw}` }, { status: 500 })
+    console.error('Invitation email send failed:', res.status, await res.text())
+    return Response.json({ error: 'Email send failed' }, { status: 502 })
   }
 
   const result = await res.json()

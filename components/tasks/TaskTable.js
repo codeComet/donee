@@ -5,6 +5,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase'
 import { canEditTask, canDeleteTask } from '@/lib/permissions'
 import { cn, truncate } from '@/lib/utils'
+import { safeHref } from '@/lib/sanitize'
 import ProjectBadge from '@/components/ui/Badge'
 import PriorityTag from '@/components/ui/PriorityTag'
 import StatusTag, { statusConfig } from '@/components/ui/StatusTag'
@@ -218,9 +219,9 @@ export default function TaskTable({ tasks, profile, workspaceMember, onRowClick,
                       <span className="font-medium text-slate-800 dark:text-slate-100">
                         {task.title}
                       </span>
-                      {task.url && (
+                      {safeHref(task.url) && (
                         <a
-                          href={task.url}
+                          href={safeHref(task.url)}
                           target="_blank"
                           rel="noopener noreferrer"
                           onClick={(e) => e.stopPropagation()}

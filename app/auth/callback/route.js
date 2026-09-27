@@ -6,7 +6,10 @@ import { WORKSPACE_COOKIE } from '@/lib/workspace'
 export async function GET(request) {
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
-  const next = searchParams.get('next') ?? '/dashboard'
+  // Only allow same-origin relative paths — `${origin}${next}` with next="@evil.com"
+  // or ".evil.com" would otherwise redirect off-site (open redirect).
+  const rawNext = searchParams.get('next') ?? '/dashboard'
+  const next = /^\/(?![/\\])/.test(rawNext) ? rawNext : '/dashboard'
 
   if (code) {
     const cookieStore = await cookies()
