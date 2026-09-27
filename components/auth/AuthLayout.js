@@ -1,0 +1,111 @@
+"use client";
+
+import { cn } from "@/lib/utils";
+
+export const authInputClass =
+  "w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent";
+
+export const authLinkClass = "text-indigo-400 hover:text-indigo-300 font-medium";
+
+// Shared shell for login / sign up / password reset screens
+export default function AuthLayout({ children, footer }) {
+  return (
+    <main className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 px-4">
+      {/* Background decorations */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute -top-40 -right-40 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl" />
+        <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl" />
+      </div>
+
+      <div className="relative w-full max-w-sm">
+        {/* Card */}
+        <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-8 shadow-2xl">
+          {/* Logo */}
+          <div className="flex flex-col items-center mb-8">
+            <div className="w-14 h-14 bg-indigo-600 rounded-2xl flex items-center justify-center mb-4 shadow-lg shadow-indigo-500/30">
+              <svg
+                width="28"
+                height="28"
+                viewBox="0 0 28 28"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="M5 15l6 6L23 8"
+                  stroke="white"
+                  strokeWidth="3"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </div>
+            <h1 className="text-3xl font-bold text-white tracking-tight">
+              Donee
+            </h1>
+            <p className="text-slate-400 text-sm mt-1">
+              Task tracking for modern teams
+            </p>
+          </div>
+
+          {children}
+
+          {footer}
+        </div>
+
+        <p className="text-center text-slate-600 text-xs mt-4">
+          &copy; {new Date().getFullYear()} Donee
+        </p>
+      </div>
+    </main>
+  );
+}
+
+export function AuthAlert({ type = "error", children }) {
+  if (!children) return null;
+  return (
+    <div
+      className={cn(
+        "rounded-lg px-4 py-3 text-sm border",
+        type === "error"
+          ? "bg-red-500/10 border-red-500/20 text-red-300"
+          : "bg-emerald-500/10 border-emerald-500/20 text-emerald-300",
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
+export function AuthSubmitButton({ loading, children }) {
+  return (
+    <button
+      type="submit"
+      disabled={loading}
+      className="w-full flex items-center justify-center gap-3 bg-indigo-600 text-white font-semibold py-3 px-4 rounded-xl hover:bg-indigo-500 transition-all duration-150 shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
+    >
+      {loading && (
+        <svg
+          className="animate-spin h-5 w-5 text-white/70"
+          xmlns="http://www.w3.org/2000/svg"
+          fill="none"
+          viewBox="0 0 24 24"
+        >
+          <circle
+            className="opacity-25"
+            cx="12"
+            cy="12"
+            r="10"
+            stroke="currentColor"
+            strokeWidth="4"
+          />
+          <path
+            className="opacity-75"
+            fill="currentColor"
+            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+          />
+        </svg>
+      )}
+      {children}
+    </button>
+  );
+}
