@@ -36,7 +36,8 @@ export async function GET(request) {
       // Check if user has a workspace already selected
       const hasWorkspaceCookie = !!cookieStore.get(WORKSPACE_COOKIE)?.value
 
-      if (!hasWorkspaceCookie && user) {
+      // Password recovery must land on /reset-password regardless of workspace state
+      if (!hasWorkspaceCookie && user && next !== '/reset-password') {
         // Check if user belongs to any workspace
         const { data: memberships } = await supabase
           .from('workspace_members')
