@@ -447,6 +447,22 @@ export default function TaskDrawer({ task, taskNotFound = false, isOpen, onClose
             }}
           />
 
+          <div>
+            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1.5">
+              Created By
+            </p>
+            {task.creator ? (
+              <div className="flex items-center gap-2">
+                <Avatar user={task.creator} size="xs" />
+                <span className="text-sm text-slate-700 dark:text-slate-200">
+                  {task.creator.full_name}
+                </span>
+              </div>
+            ) : (
+              <span className="text-slate-400 italic text-xs">Unknown</span>
+            )}
+          </div>
+
           <EditableField
             label="Estimation"
             value={task.estimation}
@@ -487,7 +503,10 @@ export default function TaskDrawer({ task, taskNotFound = false, isOpen, onClose
               />
             ) : (
               <div
-                onClick={() => canEditAllFields && setDescEditing(true)}
+                onClick={(e) =>
+                  // clicking a link opens it; don't also switch into edit mode
+                  canEditAllFields && !e.target.closest("a") && setDescEditing(true)
+                }
                 className={cn(
                   "text-sm rounded-lg px-2 py-1.5 -mx-2 min-h-[40px]",
                   canEditAllFields &&

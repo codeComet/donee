@@ -24,13 +24,15 @@ Donee is a full-stack collaborative task tracker for small dev teams. Teams mana
 | `pm`          | Everything developer + assign tasks + manage own projects          |
 | `super_admin` | Full access: all tasks, all projects, user management, admin panel |
 
-Role is stored in `profiles.role`. Google OAuth auto-creates profile via DB trigger.
+Role is stored in `profiles.role`. Signing up (email/password) auto-creates the profile via DB trigger, using the full name entered at sign-up.
 
 ## Pages
 
 | Route                     | Description                                         |
 | ------------------------- | --------------------------------------------------- |
-| `/`                       | Login (Google OAuth only)                           |
+| `/`                       | Login / sign up (email + password)                  |
+| `/forgot-password`        | Request a password reset email                      |
+| `/reset-password`         | Set a new password (from the reset email link)      |
 | `/workspace`              | Workspace onboarding (create/join/switch)           |
 | `/dashboard`              | Overview: stat cards, 14-day chart, project grid    |
 | `/dashboard/tasks`        | All tasks: sortable table with filters, task drawer |
@@ -64,11 +66,14 @@ tasks
   priority: lowest|low|medium|high|critical
   status:   backlog|in_progress|estimation|review|
             done_in_staging|waiting_for_confirmation|paused|done
-  assigned_to, created_by, estimation (text), url, updated_at
+  assigned_to, created_by, estimation (text), url, deadline, updated_at
+  description is HTML (TipTap)
 
 task_notes
   id, workspace_id, task_id, author_id, content, mentions (uuid[])
   ← @mention in content triggers notification (via DB trigger)
+  ← content is HTML; screenshots added at task creation are one note of <img> tags
+    (files live in the public `task-images` storage bucket)
 
 notifications
   id, workspace_id, user_id, task_id, type (task_assigned|note_mention|task_created|workspace_invite), message, is_read
@@ -88,6 +93,8 @@ TasksPageClient (client)
   → TaskTable → row click → TaskDrawer (slide-in panel)
   → TaskTable → inline status select → optimistic update
   → "Add Task" → AddTaskModal (2-step Radix Dialog)
+      step 1: title, project, RichTextEditor description, ScreenshotPicker
+      create → insert task → attachScreenshotsAsNote (lib/screenshots.js)
 
 TaskDrawer
   → React Query['notes', taskId] for notes thread
@@ -119,8 +126,9 @@ profiles!task_notes_author_id_fkey // task_notes.author_id → profiles
 
 ## Authentication
 
-- Google OAuth via Supabase Auth
-- Flow: Login → Google → `/auth/callback?code=...` → exchange code → set session → `/dashboard`
+- Email/password via Supabase Auth (`signInWithPassword`, `signUp`)
+- Email links (confirmation, password recovery) → `/auth/callback?code=...` → exchange code → `next` (default `/dashboard`)
+- Forgot password: `/forgot-password` → email → `/auth/callback?next=/reset-password` → `/reset-password`
 - Middleware (`middleware.js`) guards all `/dashboard/*` and `/admin/*` routes
 - Dashboard layout also guards (double-check after middleware)
 
@@ -134,6 +142,12 @@ profiles!task_notes_author_id_fkey // task_notes.author_id → profiles
 ## Edge Function
 
 `supabase/functions/send-notification-email/index.ts` — Resend API email sender, triggered by Postgres Webhook on `notifications` INSERT. Not critical for app function.
+
+## Chrome Extension
+
+`chrome-extension/` — separate Vite + React popup (see `chrome-extension/SETUP.md`). Email/password sign in via the
+background service worker; Add Task supports a rich-text description and multiple screenshots (capture current tab,
+upload, paste), saved to the task's notes the same way as the web app.
 
 ## File Conventions
 
@@ -155,8 +169,8 @@ Run: `npm run test`
 ## Setup Checklist (First Time)
 
 1. Copy `.env.local.example` → `.env.local`, fill Supabase URL + anon key
-2. Run `supabase/migrations/001_init.sql` in Supabase SQL editor
-3. Enable Google OAuth in Supabase Dashboard → Auth → Providers → Google
-4. Set redirect URL in Supabase: `http://localhost:3000/auth/callback`
+2. Run the migrations in `supabase/migrations/` (in order) in Supabase SQL editor
+3. Make sure the Email provider is enabled in Supabase Dashboard → Auth → Providers
+4. Add redirect URL in Supabase → Auth → URL Configuration: `http://localhost:3000/auth/callback**`
 5. `npm run dev`
 6. First user to sign up should be manually promoted to `super_admin` in Supabase table editor
