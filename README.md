@@ -6,11 +6,13 @@ A production-ready, full-stack task tracker for modern teams. Built with Next.js
 
 ## Features
 
-- **Google OAuth** — Sign in with Google only (no passwords)
+- **Email/password auth** — Sign in, sign up, and forgot/reset password
 - **Workspaces** — Multi-workspace support with onboarding, switching, and invite codes
 - **Role-based access control** — `super_admin`, `pm`, `developer`
 - **Projects** — Color-coded, with PM assignment and member avatars
-- **Task management** — Priority, status, assignment, estimation, URL attachment
+- **Task management** — Priority, status, assignment, estimation, deadline, URL attachment
+- **Rich-text descriptions** — TipTap editor with bold/italic/lists and @mentions
+- **Screenshots on task creation** — Upload, drag & drop, paste or capture multiple screenshots; attached as a task note
 - **Task drawer** — Slide-in side panel with inline editing and notes thread
 - **@mention autocomplete** — Type `@` in notes to mention project members
 - **Dark mode** — Theme toggle in the top bar (persisted locally)
@@ -19,6 +21,7 @@ A production-ready, full-stack task tracker for modern teams. Built with Next.js
 - **Admin panel** — Manage users, roles, and projects
 - **Charts** — 14-day task activity bar chart (Recharts)
 - **Responsive** — Mobile-friendly with collapsible sidebar
+- **Chrome extension** — Add tasks (with screenshots of the current tab) from any page — see [`chrome-extension/SETUP.md`](chrome-extension/SETUP.md)
 
 ---
 
@@ -28,7 +31,8 @@ A production-ready, full-stack task tracker for modern teams. Built with Next.js
 | ---------- | ----------------------------------- |
 | Framework  | Next.js 15 (App Router, JS)         |
 | Database   | Supabase (PostgreSQL + RLS)         |
-| Auth       | Supabase Auth (Google OAuth)        |
+| Auth       | Supabase Auth (email/password)      |
+| Editor     | TipTap                              |
 | Styling    | Tailwind CSS                        |
 | Components | Radix UI primitives (shadcn-style)  |
 | Data fetch | React Query (@tanstack/react-query) |
@@ -78,11 +82,15 @@ supabase/migrations/
 
 This creates all tables, RLS policies, triggers, and functions.
 
-### 4. Enable Google OAuth in Supabase
+### 4. Configure Supabase Auth
 
-1. Supabase Dashboard → **Authentication → Providers → Google**
-2. Enable it and enter your Google OAuth credentials
-3. Add `http://localhost:3000/auth/callback` to the redirect URLs
+1. Supabase Dashboard → **Authentication → Providers → Email** — make sure it's enabled
+   (turn "Confirm email" on or off as you prefer; the sign-up page handles both)
+2. **Authentication → URL Configuration → Redirect URLs** — add:
+   - `http://localhost:3000/auth/callback**`
+   - `https://your-production-url.com/auth/callback**`
+
+   These are needed for email confirmation and password-reset links.
 
 ### 5. Deploy the Edge Function (optional — for email notifications)
 
@@ -130,8 +138,10 @@ npm run dev:prod
 ```
 donee/
 ├── app/
-│   ├── page.js                        # Login page
-│   ├── auth/callback/route.js         # OAuth callback handler
+│   ├── page.js                        # Login / sign up page
+│   ├── auth/callback/route.js         # Email link (confirm / recovery) code exchange
+│   ├── forgot-password/page.js        # Request password reset email
+│   ├── reset-password/page.js         # Set a new password
 │   ├── dashboard/
 │   │   ├── layout.js                  # Dashboard shell (sidebar + topbar)
 │   │   ├── page.js                    # Main dashboard (stats + chart + project grid)
@@ -153,6 +163,7 @@ donee/
 │   │   ├── TaskTable.js               # Sortable, filterable task table
 │   │   ├── TaskDrawer.js              # Slide-in task detail drawer with notes
 │   │   ├── AddTaskModal.js            # Multi-step task creation modal
+│   │   ├── ScreenshotPicker.js        # Multi-screenshot picker for new tasks
 │   │   └── TaskFilters.js             # Multi-select filter bar
 │   ├── dashboard/
 │   │   ├── StatCards.js               # KPI stat cards
@@ -161,8 +172,11 @@ donee/
 │   ├── admin/
 │   │   ├── UsersTab.js                # User table with inline role editing
 │   │   └── ProjectsTab.js             # Project list with create/edit/archive
+│   ├── auth/
+│   │   └── AuthLayout.js              # Shared layout for auth pages
 │   ├── ui/
 │   │   ├── Avatar.js                  # User avatar with initials fallback
+│   │   ├── RichTextEditor.js          # TipTap editor (descriptions + notes)
 │   │   ├── Badge.js                   # Project color badge
 │   │   ├── PriorityTag.jsx            # Priority pill
 │   │   ├── StatusTag.jsx              # Status pill
@@ -174,7 +188,9 @@ donee/
 │   ├── supabase.js                    # Supabase client + server factories
 │   ├── permissions.js                 # Role-check helpers
 │   ├── notifications.js               # Notification helpers (fetch, subscribe)
+│   ├── screenshots.js                 # Screenshot validation + upload as task note
 │   └── utils.js                       # cn(), getInitials(), truncate()
+├── chrome-extension/                  # Donee Chrome extension (see SETUP.md inside)
 ├── supabase/
 │   ├── migrations/001_init.sql        # Full DB schema + RLS + triggers
 │   └── functions/
@@ -205,7 +221,7 @@ donee/
 
 ## Making a User Super Admin
 
-After your first login, run this in the Supabase SQL Editor:
+After you sign up, run this in the Supabase SQL Editor:
 
 ```sql
 UPDATE public.profiles
@@ -225,3 +241,5 @@ vercel deploy
 ```
 
 Set all `.env.local` variables as Vercel Environment Variables, and update `NEXT_PUBLIC_APP_URL` to your production URL.
+
+Branch flow: push to `dev` (Vercel preview) → open a PR to `main` → merge to deploy production.

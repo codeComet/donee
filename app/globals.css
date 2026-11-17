@@ -65,6 +65,8 @@
   }
 
   /* ── Rich text (Tiptap) ── */
+  /* Long URLs/tokens would otherwise push the container wider than its parent */
+  .rich-text { overflow-wrap: anywhere; min-width: 0; }
   .rich-text .ProseMirror { outline: none; }
 
   /* Placeholder */
@@ -93,6 +95,7 @@
   .rich-text pre code     { @apply bg-transparent p-0; }
   .rich-text blockquote   { @apply border-l-4 border-slate-300 dark:border-slate-500 pl-3 italic text-slate-500 dark:text-slate-400 mb-1; }
   .rich-text hr           { @apply border-slate-200 dark:border-slate-600 my-3; }
+  .rich-text a            { @apply text-indigo-600 dark:text-indigo-400 underline underline-offset-2 hover:text-indigo-800 dark:hover:text-indigo-300 cursor-pointer; }
   .rich-text [data-mention-id] { @apply text-indigo-600 font-medium bg-indigo-50 dark:bg-indigo-900/30 rounded px-0.5; }
 
   /* Images (screenshots) */

@@ -24,28 +24,14 @@ Edit `.env`:
 ```
 VITE_SUPABASE_URL=https://your-project-ref.supabase.co
 VITE_SUPABASE_ANON_KEY=your-anon-key
+VITE_APP_URL=https://your-web-app-domain   # used for "Forgot password?" and "Sign up" links
 ```
 
-## 3. Find your extension ID (for OAuth redirect)
+Sign in uses **email + password** (same accounts as the web app). No OAuth redirect URL is needed for the extension.
+Password reset and sign up happen in the web app, so make sure the web app's `/auth/callback**` is in
+Supabase → Authentication → URL Configuration → Redirect URLs.
 
-You need the extension ID **before** loading it in Chrome, because it is derived from the extension's key. For development:
-
-1. Build the extension first: `npm run build`
-2. Open Chrome → `chrome://extensions` → Enable **Developer mode**
-3. Click **Load unpacked** → select the `dist/` folder
-4. Note the extension ID shown (e.g. `abcdefghijklmnopqrstuvwxyz123456`)
-
-The redirect URL will be: `https://<extension-id>.chromiumapp.org/`
-
-## 4. Add redirect URL to Supabase
-
-In Supabase Dashboard → Authentication → URL Configuration → **Redirect URLs**, add:
-
-```
-https://<your-extension-id>.chromiumapp.org/
-```
-
-## 5. Generate icons
+## 3. Generate icons
 
 ```bash
 npm run generate-icons
@@ -53,7 +39,7 @@ npm run generate-icons
 
 This creates `public/icons/icon16.png`, `icon48.png`, `icon128.png` (indigo squares).
 
-## 6. Build
+## 4. Build
 
 ```bash
 npm run build
@@ -61,11 +47,31 @@ npm run build
 
 Output is in `dist/`.
 
-## 7. Load in Chrome
+If the build fails with `Cannot find module @rollup/rollup-darwin-arm64` (or another platform), reinstall:
+`rm -rf node_modules && npm install`.
+
+## 5. Load in Chrome
 
 1. `chrome://extensions` → Developer mode ON
 2. **Load unpacked** → select `dist/`
-3. Click the Donee icon in the toolbar
+3. Click the puzzle icon in the toolbar → pin **Donee**
+
+After a rebuild, click the reload ↻ icon on the Donee card. If the manifest's permissions changed, Chrome asks you to approve them.
+
+---
+
+## Adding tasks
+
+The **Add Task** tab supports:
+
+- **Rich-text description** (TipTap: bold, italic, bullet/numbered lists)
+- **Screenshots** — any number, via:
+  - **Capture this tab** (`chrome.tabs.captureVisibleTab`; not available on `chrome://` or Web Store pages)
+  - **Upload images** (multi-select)
+  - **Paste** (Ctrl/⌘+V anywhere in the form)
+
+  PNG/JPEG/GIF/WebP, max 5 MB each. On create, they're uploaded to the `task-images` bucket and added to the
+  task as a single note (visible under Notes in the task drawer).
 
 ---
 
@@ -84,7 +90,8 @@ Reload the extension in `chrome://extensions` after each rebuild.
 - The Supabase anon key is safe to embed (it's already public in the web app)
 - All data security is enforced via Supabase RLS policies
 - Session tokens are stored in `chrome.storage.local` (isolated per extension, not accessible by web pages)
-- OAuth uses PKCE flow (no implicit tokens)
+- Sign in exchanges email + password for a session via Supabase Auth (`grant_type=password`) in the background worker
+- Permissions: `storage` (session), `activeTab` (capture the current tab only when the popup is opened on it)
 - Sign out revokes the session server-side
 
 ---
