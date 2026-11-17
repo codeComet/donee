@@ -21,8 +21,9 @@ NEXT_PUBLIC_SUPABASE_URL=https://xxxxx.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
 ```
 
-Run SQL migration in Supabase SQL editor: `supabase/migrations/001_init.sql`  
-Enable Google OAuth in Supabase Dashboard → Auth → Providers.
+Run SQL migrations in Supabase SQL editor: `supabase/migrations/` (in order)  
+Auth is **email/password** (Email provider in Supabase Dashboard → Auth → Providers). Google OAuth is no longer used by the UI.  
+Supabase Dashboard → Auth → URL Configuration → Redirect URLs must include `https://<app-domain>/auth/callback**` (and `http://localhost:3000/auth/callback**`) — required for email confirmation and password-reset links.
 
 ## Commands
 
@@ -55,9 +56,11 @@ npm run test:coverage
 ```
 app/
   layout.js                   Root layout (QueryProvider)
-  page.js                     Login page (Google OAuth)
+  page.js                     Login page: email/password sign in + sign up toggle
   globals.css
-  auth/callback/route.js      OAuth code exchange → redirect /dashboard
+  auth/callback/route.js      Code exchange (email confirm / recovery) → `next` param (default /dashboard)
+  forgot-password/page.js     Sends reset email (resetPasswordForEmail → /auth/callback?next=/reset-password)
+  reset-password/page.js      Set new password (updateUser) → /dashboard
   dashboard/
     layout.js                 Guard + fetch profile/projects → Sidebar+Topbar
     page.js                   Dashboard overview (stats, chart, project grid)
@@ -78,6 +81,7 @@ app/
 
 components/
   providers/QueryProvider.js  React Query client (staleTime=60s, no refetchOnFocus)
+  auth/AuthLayout.js          Shared shell for login/forgot/reset + AuthAlert, AuthSubmitButton, input classes
   layout/
     Sidebar.js                Nav (collapse, mobile overlay, projects list, admin link)
     Topbar.js                 Breadcrumbs, NotificationDropdown, user dropdown + sign out
@@ -88,11 +92,14 @@ components/
     PriorityTag.js            5 priorities — exports priorityConfig
     SkeletonLoader.js         Skeleton, TableRowSkeleton, CardSkeleton, TaskTableSkeleton
     NotificationDropdown.js   Bell + unread count, real-time, mark read
+    RichTextEditor.js         TipTap editor (bold/italic/lists, @mentions, image paste/upload);
+                              `onPasteImages` routes pasted images to the caller instead of inserting
   tasks/
     TaskTable.js              Sortable table, inline status select, optimistic updates, delete
     TaskFilters.js            Search, multi-select (project/status/priority/assignee), date range
     TaskDrawer.js             Slide-in panel: editable fields, @mention notes thread
-    AddTaskModal.js           2-step Radix Dialog (title+project → priority+status+assignee+est)
+    AddTaskModal.js           2-step Radix Dialog (title+project+rich description+screenshots → priority+status+assignee+est)
+    ScreenshotPicker.js       Multi-image picker: upload, drag & drop, paste, screen capture (getDisplayMedia)
   dashboard/
     StatCards.js              4 stat cards (server props)
     TaskChart.js              Recharts bar chart: created vs completed, last 14 days
@@ -107,6 +114,12 @@ lib/
   utils.js                    cn(), getInitials(name), truncate(str, n=60)
   permissions.js              ROLES const + helper fns (optionally accept workspace member)
   notifications.js            fetchUnread, markRead, markAllRead, subscribeToNotifications
+  screenshots.js              validateScreenshot, toScreenshot, attachScreenshotsAsNote (upload + one task note)
+
+chrome-extension/             Separate Vite + React app (see chrome-extension/SETUP.md)
+  src/background/service-worker.js  Email/password sign in, token refresh, sign out (REST calls)
+  src/popup/pages/AddTaskPage.jsx   Add task: TipTap description + screenshots (tab capture/upload/paste)
+  src/popup/components/             RichTextEditor.jsx, ScreenshotPicker.jsx, WorkspacePicker.jsx, …
 
 supabase/
   migrations/001_init.sql     Schema: profiles, projects, project_members, tasks, task_notes, notifications
@@ -136,13 +149,13 @@ All tables have RLS enabled.
 
 - **project_members** — (id, project_id, user_id, joined_at) — UNIQUE(project_id, user_id)
 
-- **tasks** — (id, project_id, title, description, priority, status, assigned_to, created_by, estimation, url, created_at, updated_at)  
+- **tasks** — (id, project_id, title, description (HTML), priority, status, assigned_to, created_by, estimation, url, deadline, created_at, updated_at)  
   priority: `lowest|low|medium|high|critical`  
   status: `backlog|in_progress|estimation|review|done_in_staging|waiting_for_confirmation|paused|done`
 
 DB Triggers:
 
-- `handle_new_user` — auto-creates profile on auth.users INSERT (from Google OAuth metadata)
+- `handle_new_user` — auto-creates profile on auth.users INSERT (`full_name` from sign-up metadata, falls back to email prefix)
 - `handle_task_updated_at` — updates tasks.updated_at on UPDATE
 - `handle_task_note_mentions` — parses @name from note content, creates notification rows, populates mentions[]
 - `handle_task_insert_notification` — creates task_assigned notification on INSERT if assigned_to set
@@ -152,9 +165,22 @@ Realtime enabled on: `notifications`, `tasks`
 
 ## Auth Flow
 
-1. Login page → `supabase.auth.signInWithOAuth({ provider: 'google', redirectTo: /auth/callback })`
-2. `/auth/callback` → `exchangeCodeForSession(code)` → redirect `/dashboard`
-3. Middleware guards `/dashboard/*` and `/admin/*`; redirects authenticated users away from `/`
+1. Sign in: `supabase.auth.signInWithPassword({ email, password })` → `/dashboard`
+2. Sign up: `supabase.auth.signUp({ email, password, options: { data: { full_name }, emailRedirectTo: /auth/callback } })`  
+   → session immediately, or "check your email" if confirmation is enabled
+3. Forgot password: `/forgot-password` → `resetPasswordForEmail(email, { redirectTo: /auth/callback?next=/reset-password })`  
+   → `/reset-password` → `updateUser({ password })`. PKCE: the link must be opened in the same browser that requested it.
+4. `/auth/callback` → `exchangeCodeForSession(code)` → `next`. Users without a workspace go to `/workspace`, except when `next=/reset-password`.
+5. Middleware guards `/dashboard/*` and `/admin/*`; redirects authenticated users away from `/`
+
+## Task Screenshots
+
+- Add Task (web modal + extension) collects multiple screenshots; on create they're uploaded to the public
+  `task-images` bucket (`<user_id>/<timestamp>-<i>.<ext>`, PNG/JPEG/GIF/WebP, ≤5 MB each) and inserted as **one
+  `task_notes` row** whose content is `<img>` tags (use `attachScreenshotsAsNote` from `@/lib/screenshots`).
+- If the task is created but the upload fails, the UI reports a partial failure instead of retrying (avoids duplicate tasks).
+- Note/description HTML is rendered via `dangerouslySetInnerHTML` inside `.rich-text` (styles in `globals.css`) —
+  **always** pass it through `sanitizeRichText()` from `@/lib/sanitize` (stored-XSS guard); use `safeHref()` for user URLs.
 
 ## Workspaces
 
@@ -263,6 +289,19 @@ const unsub = subscribeToNotifications(userId, () => {
 - Custom animations in `tailwind.config.js`: `animate-fade-in`, `animate-slide-in-right`, `animate-shimmer`
 - Colors: indigo-600 primary, slate-\* neutral, status/priority colors match StatusTag/PriorityTag configs
 
+## Supabase CLI
+
+- Installed via Homebrew; linked to **prod** (`pfprpwhbdqebhenbqgby`, "Donee Prod"). Dev project: `iszczjmhltjzphcsrfof` ("Donee Dev", same account, recreated 2026-11-03; old `baeeayzyvdwtofztewcr` is gone). Target it with `--remote=iszczjmhltjzphcsrfof`.
+- Run SQL: `supabase db query --linked "select …"` (read-only queries freely; confirm before writes on prod).
+- Migration files use `NNN_name.sql`, not the CLI's timestamp format, and were applied by hand — **do not run `supabase db push`**.
+- The `notifications` INSERT trigger calls the `send-notification-email` webhook (real emails). Disable user triggers
+  inside the transaction when doing bulk data fixes that would insert notifications.
+
+## Git / Deploy
+
+- Work on `dev`, open a PR `dev → main`. Vercel deploys previews from `dev` and production from `main`.
+- Commit style: gitmoji prefix (`:sparkles:`, `:bug:`, `:lipstick:`, `:memo:`).
+
 ## Path Alias
 
 `@/` → project root (configured in `next.config.js` via Next.js default)
@@ -272,5 +311,7 @@ const unsub = subscribeToNotifications(userId, () => {
 - No error.js / not-found.js pages (only `notFound()` redirect)
 - No toast notifications for mutation errors
 - Dashboard sidebar projects list is server-fetched (doesn't update on new project without refresh)
+- Extension Add Task filters PM projects by legacy `projects.pm_id`, not `project_managers`
+- Uploaded screenshots are never deleted from storage when a task/note is deleted
 - Dark mode is supported (ThemeProvider + topbar toggle)
   
