@@ -17,21 +17,45 @@ export default async function TasksPage({ searchParams }) {
   const workspaceId = getWorkspaceId(cookieStore)
   if (!workspaceId) redirect('/workspace')
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', user.id)
-    .single()
-
-  const { data: workspaceMember } = await supabase
-    .from('workspace_members')
-    .select('role')
-    .eq('workspace_id', workspaceId)
-    .eq('user_id', user.id)
-    .single()
+  // Independent queries — run in parallel to cut navigation latency
+  const [{ data: profile }, { data: workspaceMember }, { data: members }] = await Promise.all([
+    supabase.from('profiles').select('*').eq('id', user.id).single(),
+    supabase
+      .from('workspace_members')
+      .select('role')
+      .eq('workspace_id', workspaceId)
+      .eq('user_id', user.id)
+      .single(),
+    supabase
+      .from('workspace_members')
+      .select('user:profiles(id, full_name, avatar_url)')
+      .eq('workspace_id', workspaceId),
+  ])
 
   const isAdmin = isSuperAdmin(profile, workspaceMember)
   const isProjectManager = isPM(profile, workspaceMember)
+
+  // Resolve the project-id scope each role needs (fetched once, reused by both queries below)
+  let pmProjectIds = null
+  let devProjectIds = null
+  if (!isAdmin && isProjectManager) {
+    const { data: managerships } = await supabase
+      .from('project_managers')
+      .select('project_id')
+      .eq('user_id', user.id)
+    pmProjectIds = (managerships ?? []).map((m) => m.project_id)
+  } else if (!isAdmin) {
+    const [{ data: memberRows }, { data: assignedRows }] = await Promise.all([
+      supabase.from('project_members').select('project_id').eq('user_id', user.id),
+      supabase.from('tasks').select('project_id').eq('workspace_id', workspaceId).eq('assigned_to', user.id),
+    ])
+    devProjectIds = [...new Set([
+      ...(memberRows ?? []).map((r) => r.project_id),
+      ...(assignedRows ?? []).map((r) => r.project_id),
+    ])]
+  }
+
+  const NO_MATCH = '00000000-0000-0000-0000-000000000000'
 
   // Build task query scoped by role
   let taskQuery = supabase
@@ -48,23 +72,12 @@ export default async function TasksPage({ searchParams }) {
   if (isAdmin) {
     // sees all tasks in workspace — no extra filter
   } else if (isProjectManager) {
-    // PM sees tasks from projects they manage
-    const { data: managerships } = await supabase
-      .from('project_managers')
-      .select('project_id')
-      .eq('user_id', user.id)
-    const pmProjectIds = (managerships ?? []).map((m) => m.project_id)
-    if (pmProjectIds.length === 0) {
-      taskQuery = taskQuery.eq('id', '00000000-0000-0000-0000-000000000000')
-    } else {
-      taskQuery = taskQuery.in('project_id', pmProjectIds)
-    }
+    taskQuery = pmProjectIds.length > 0
+      ? taskQuery.in('project_id', pmProjectIds)
+      : taskQuery.eq('id', NO_MATCH)
   } else {
-    // Developer sees only tasks assigned to them
     taskQuery = taskQuery.eq('assigned_to', user.id)
   }
-
-  const { data: tasks } = await taskQuery
 
   // Projects for filter dropdown — scoped by role
   let projectQuery = supabase
@@ -75,36 +88,16 @@ export default async function TasksPage({ searchParams }) {
     .order('name')
 
   if (isProjectManager && !isAdmin) {
-    const { data: managerships } = await supabase
-      .from('project_managers')
-      .select('project_id')
-      .eq('user_id', user.id)
-    const pmProjectIds = (managerships ?? []).map((m) => m.project_id)
     projectQuery = pmProjectIds.length > 0
       ? projectQuery.in('id', pmProjectIds)
-      : projectQuery.eq('id', '00000000-0000-0000-0000-000000000000')
+      : projectQuery.eq('id', NO_MATCH)
   } else if (!isAdmin && !isProjectManager) {
-    // Developer: only projects they're a member of or have assigned tasks
-    const [{ data: memberRows }, { data: assignedRows }] = await Promise.all([
-      supabase.from('project_members').select('project_id').eq('user_id', user.id),
-      supabase.from('tasks').select('project_id').eq('workspace_id', workspaceId).eq('assigned_to', user.id),
-    ])
-    const devProjectIds = [...new Set([
-      ...(memberRows ?? []).map((r) => r.project_id),
-      ...(assignedRows ?? []).map((r) => r.project_id),
-    ])]
     projectQuery = devProjectIds.length > 0
       ? projectQuery.in('id', devProjectIds)
-      : projectQuery.eq('id', '00000000-0000-0000-0000-000000000000')
+      : projectQuery.eq('id', NO_MATCH)
   }
 
-  const { data: projects } = await projectQuery
-
-  // Workspace members for assignee filter
-  const { data: members } = await supabase
-    .from('workspace_members')
-    .select('user:profiles(id, full_name, avatar_url)')
-    .eq('workspace_id', workspaceId)
+  const [{ data: tasks }, { data: projects }] = await Promise.all([taskQuery, projectQuery])
 
   const users = (members ?? []).map((m) => m.user).filter(Boolean)
 

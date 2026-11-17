@@ -25,49 +25,49 @@ export default async function ProjectPage({ params }) {
   const workspaceId = getWorkspaceId(cookieStore)
   if (!workspaceId) redirect('/workspace')
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', user.id)
-    .single()
-
-  const { data: workspaceMember } = await supabase
-    .from('workspace_members')
-    .select('role')
-    .eq('workspace_id', workspaceId)
-    .eq('user_id', user.id)
-    .single()
-
-  const { data: project, error } = await supabase
-    .from('projects')
-    .select(
-      `*,
-       project_managers(user:profiles!project_managers_user_id_fkey(id, full_name, avatar_url)),
-       members:project_members(user:profiles(id, full_name, avatar_url))`
-    )
-    .eq('id', id)
-    .eq('workspace_id', workspaceId)
-    .single()
+  // Independent queries — run in parallel to cut navigation latency
+  const [
+    { data: profile },
+    { data: workspaceMember },
+    { data: project, error },
+    { data: tasks },
+    { data: members },
+  ] = await Promise.all([
+    supabase.from('profiles').select('*').eq('id', user.id).single(),
+    supabase
+      .from('workspace_members')
+      .select('role')
+      .eq('workspace_id', workspaceId)
+      .eq('user_id', user.id)
+      .single(),
+    supabase
+      .from('projects')
+      .select(
+        `*,
+         project_managers(user:profiles!project_managers_user_id_fkey(id, full_name, avatar_url)),
+         members:project_members(user:profiles(id, full_name, avatar_url))`
+      )
+      .eq('id', id)
+      .eq('workspace_id', workspaceId)
+      .single(),
+    supabase
+      .from('tasks')
+      .select(
+        `*,
+         project:projects(id, name, color),
+         assignee:profiles!tasks_assigned_to_fkey(id, full_name, avatar_url),
+         creator:profiles!tasks_created_by_fkey(id, full_name)`
+      )
+      .eq('project_id', id)
+      .eq('workspace_id', workspaceId)
+      .order('updated_at', { ascending: false }),
+    supabase
+      .from('workspace_members')
+      .select('user:profiles(id, full_name, avatar_url)')
+      .eq('workspace_id', workspaceId),
+  ])
 
   if (error || !project) notFound()
-
-  const { data: tasks } = await supabase
-    .from('tasks')
-    .select(
-      `*,
-       project:projects(id, name, color),
-       assignee:profiles!tasks_assigned_to_fkey(id, full_name, avatar_url),
-       creator:profiles!tasks_created_by_fkey(id, full_name)`
-    )
-    .eq('project_id', id)
-    .eq('workspace_id', workspaceId)
-    .order('updated_at', { ascending: false })
-
-  // Workspace members for assignee options
-  const { data: members } = await supabase
-    .from('workspace_members')
-    .select('user:profiles(id, full_name, avatar_url)')
-    .eq('workspace_id', workspaceId)
 
   const users = (members ?? []).map((m) => m.user).filter(Boolean)
 
